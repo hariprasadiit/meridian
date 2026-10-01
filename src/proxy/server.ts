@@ -2590,6 +2590,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
           isSubagent: isSubagentRequest,
           clientDrivenLoop: isClientDrivenLoop,
           hasDurableKey: Boolean(durableMappingKey),
+          isAuxiliary: false,
         })
         const isIndependentSession = independentCause !== undefined
         // Once per process: the operator cannot see this in success metrics.
