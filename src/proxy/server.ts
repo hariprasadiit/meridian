@@ -1464,7 +1464,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
       })
       const sniffed = await sniffAccountFailure(inner)
       if (!sniffed.failed) {
-        if (options.sessionKey && !options.durableRoute) {
+        if (options.sessionKey && !options.durableRoute && !options.requestMeta.auxiliaryRequest) {
           // Process memory preserves only legacy/keyless new-conversation
           // affinity. Trusted attempts publish authority at the atomic durable
           // terminal barrier and must not poison adoption on errors or cancel.
@@ -1930,7 +1930,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
             )
             const preferred = order[0]
             if (preferred !== undefined) {
-              const trustedTurn = requestMeta.routingTurnIdentity
+              const trustedTurn = requestMeta.auxiliaryRequest ? undefined : requestMeta.routingTurnIdentity
               let promotionTurn = trustedTurn
               let publicationTurn: PriorityDispatchOptions["publicationTurn"]
               const failbackPolicy = getPriorityFailbackPolicy(
@@ -1951,62 +1951,67 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                   }, 503, TRANSIENT_RETRY_AFTER_HEADERS)
                 }
                 if (routeResult.status === "found") {
-                  durableRoute = { routeKey, expectedGeneration: routeResult.generation }
                   assignment = {
                     profileId: routeResult.assignment.profileId,
                     requestId: routeResult.assignment.lastHumanTurnDigest,
                   }
-                  // Existing signed metadata is retention-only authority. It
-                  // may refresh this exact route atomically, but promotionTurn
-                  // below remains the sole permission to move profiles.
-                  publicationTurn = {
-                    turnId: routeResult.assignment.lastHumanTurnDigest,
-                    issuedAt: routeResult.assignment.lastHumanTurnIssuedAt,
-                  }
-                  if (trustedTurn) {
-                    const sameHumanTurn = trustedTurn.turnId === routeResult.assignment.lastHumanTurnDigest
-                    const strictlyNewer = trustedTurn.issuedAt > routeResult.assignment.lastHumanTurnIssuedAt
-                    if (sameHumanTurn) {
-                      publicationTurn = {
-                        turnId: trustedTurn.turnId,
-                        issuedAt: Math.max(trustedTurn.issuedAt, routeResult.assignment.lastHumanTurnIssuedAt),
-                      }
-                    } else if (strictlyNewer) {
-                      publicationTurn = trustedTurn
-                    } else {
-                      // A valid but older/equal changed token is a replay or an
-                      // ambiguous same-second turn. Retain and republish the
-                      // current route, but never let it trigger failback.
-                      promotionTurn = undefined
-                      claudeLog("priority.attestation_replay_withheld", {
-                        routeKey,
-                        issuedAt: trustedTurn.issuedAt,
-                        highWater: routeResult.assignment.lastHumanTurnIssuedAt,
-                      })
+                  // Auxiliary work may inherit placement, never conversation
+                  // publication or attempt ownership. It can fail over on its
+                  // own without moving the main turn's retained route.
+                  if (!requestMeta.auxiliaryRequest) {
+                    durableRoute = { routeKey, expectedGeneration: routeResult.generation }
+                    // Existing signed metadata is retention-only authority. It
+                    // may refresh this exact route atomically, but promotionTurn
+                    // below remains the sole permission to move profiles.
+                    publicationTurn = {
+                      turnId: routeResult.assignment.lastHumanTurnDigest,
+                      issuedAt: routeResult.assignment.lastHumanTurnIssuedAt,
                     }
-                  }
-                  const mapped = lookupSharedSessionResult(routeResult.assignment.mappingKey)
-                  if (mapped.status === "error") {
-                    return c.json({
-                      type: "error",
-                      error: { type: "overloaded_error", message: "Durable priority session state is unavailable" },
-                    }, 503, TRANSIENT_RETRY_AFTER_HEADERS)
-                  }
-                  routeMappingIsCurrent = mapped.status === "found"
-                    && mapped.generation === routeResult.assignment.mappingGeneration
-                  if (!routeMappingIsCurrent) {
-                    // Never resume an unproved mapping generation. Only a fresh,
-                    // trusted human-turn proof may atomically repair authority;
-                    // unsigned/internal work retains the route and fails closed.
-                    if (!promotionTurn) {
+                    if (trustedTurn) {
+                      const sameHumanTurn = trustedTurn.turnId === routeResult.assignment.lastHumanTurnDigest
+                      const strictlyNewer = trustedTurn.issuedAt > routeResult.assignment.lastHumanTurnIssuedAt
+                      if (sameHumanTurn) {
+                        publicationTurn = {
+                          turnId: trustedTurn.turnId,
+                          issuedAt: Math.max(trustedTurn.issuedAt, routeResult.assignment.lastHumanTurnIssuedAt),
+                        }
+                      } else if (strictlyNewer) {
+                        publicationTurn = trustedTurn
+                      } else {
+                        // A valid but older/equal changed token is a replay or an
+                        // ambiguous same-second turn. Retain and republish the
+                        // current route, but never let it trigger failback.
+                        promotionTurn = undefined
+                        claudeLog("priority.attestation_replay_withheld", {
+                          routeKey,
+                          issuedAt: trustedTurn.issuedAt,
+                          highWater: routeResult.assignment.lastHumanTurnIssuedAt,
+                        })
+                      }
+                    }
+                    const mapped = lookupSharedSessionResult(routeResult.assignment.mappingKey)
+                    if (mapped.status === "error") {
                       return c.json({
                         type: "error",
                         error: { type: "overloaded_error", message: "Durable priority session state is unavailable" },
                       }, 503, TRANSIENT_RETRY_AFTER_HEADERS)
                     }
-                    durableRoute = { ...durableRoute, forceFreshReplay: true }
+                    routeMappingIsCurrent = mapped.status === "found"
+                      && mapped.generation === routeResult.assignment.mappingGeneration
+                    if (!routeMappingIsCurrent) {
+                      // Never resume an unproved mapping generation. Only a fresh,
+                      // trusted human-turn proof may atomically repair authority;
+                      // unsigned/internal work retains the route and fails closed.
+                      if (!promotionTurn) {
+                        return c.json({
+                          type: "error",
+                          error: { type: "overloaded_error", message: "Durable priority session state is unavailable" },
+                        }, 503, TRANSIENT_RETRY_AFTER_HEADERS)
+                      }
+                      durableRoute = { ...durableRoute, forceFreshReplay: true }
+                    }
                   }
-                } else if (routeResult.attempt && !trustedTurn) {
+                } else if (routeResult.attempt && !trustedTurn && !requestMeta.auxiliaryRequest) {
                   // An absent route can still carry a durable uncertain-attempt
                   // blocker. Missing/invalid identity cannot bypass it.
                   return c.json({
@@ -2562,8 +2567,9 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
         // adapter selection untouched.
         const ownsToolLoopWithResume = adapterBase === "claude-code" || isClaudeCodeClient(c)
         const isClientDrivenLoop = !ownsToolLoopWithResume && !agentSessionId && lastIsToolResult
-        const durableMappingKey = profileSessionId
-          || getConversationFingerprint(lineageMessages, profileScopedCwd)
+        const durableMappingKey = requestMeta.auxiliaryRequest
+          ? undefined
+          : profileSessionId || getConversationFingerprint(lineageMessages, profileScopedCwd)
         // NOTE: A headerless Pi tool round must stay independent of the fingerprint's
         // SDK checkpoint: concurrent loops can share its first user message.
         // The refused tool-use ID keys only a one-shot tool-schema grant, so
@@ -2707,7 +2713,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
         const trailingSystemReminderOptions = adapterBase === "claude-code" || adapterBase === "pi"
           ? { allowTrailingSystemReminder: true }
           : undefined
-        const durableCheckpointContinuation = durableCheckpointIds?.length
+        const durableCheckpointContinuation = !isIndependentSession && durableCheckpointIds?.length
           && durableMappingAtTurn.status === "found"
           && matchesStoredLineagePrefix(durableMappingAtTurn.session, lineageMessages)
           ? coalesceCompleteToolResultContinuation(
@@ -2902,7 +2908,11 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
         const cachedSession = lineageResult.type !== "diverged" ? lineageResult.session : undefined
         let resumeSessionId = cachedSession?.claudeSessionId
         // Stable client/checkpoint identity survives a failed managed fork.
-        const idleStallSessionKey = profileSessionId || resumeSessionId || ""
+        // A side call must neither clear the main turn's retry ceiling nor
+        // inherit it. Its failure accounting lasts only for this request.
+        const idleStallSessionKey = requestMeta.auxiliaryRequest
+          ? ""
+          : profileSessionId || resumeSessionId || ""
         const idlePreflight = idleStalls.preflight(idleStallSessionKey, idleRequestKey, UPSTREAM_IDLE_MS, performance.now())
         if (idlePreflight) throw new IdleStallCeilingError(idlePreflight)
         const resumeFrom = lineageResult.type === "continuation" || lineageResult.type === "compaction"
@@ -4043,16 +4053,18 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                       rollbackUuid: undoRollbackUuid,
                       resumeSessionId,
                     })
-                    plog(`[PROXY] ${requestMeta.requestId} session unusable (${refusal}), evicting and replaying as fresh session`)
+                    plog(`[PROXY] ${requestMeta.requestId} session unusable (${refusal}), replaying as fresh session`)
                     managedForkSuperseded = true
                     await abandonManagedFork("resume_replay")
-                    if (!evictSession(
-                      profileSessionId,
-                      profileScopedCwd,
-                      lineageMessages,
-                      mappingExpectedGeneration,
-                    )) throw new Error("Session mapping changed before resume fallback eviction")
-                    mappingExpectedGeneration = refreshGenerationAfterEviction()
+                    if (!isIndependentSession) {
+                      if (!evictSession(
+                        profileSessionId,
+                        profileScopedCwd,
+                        lineageMessages,
+                        mappingExpectedGeneration,
+                      )) throw new Error("Session mapping changed before resume fallback eviction")
+                      mappingExpectedGeneration = refreshGenerationAfterEviction()
+                    }
                     await replaceWithFreshTarget("non_stream_resume_replay")
                     currentSessionId = managedForkTarget?.sessionId
                     sdkUuidMap.length = 0
@@ -4107,13 +4119,15 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                     plog(`[PROXY] ${requestMeta.requestId} extra usage persisted on resumed ${model}, retrying as fresh session`)
                     managedForkSuperseded = true
                     await abandonManagedFork("fresh_model_fallback")
-                    if (!evictSession(
-                      profileSessionId,
-                      profileScopedCwd,
-                      lineageMessages,
-                      mappingExpectedGeneration,
-                    )) throw new Error("Session mapping changed before model fallback eviction")
-                    mappingExpectedGeneration = refreshGenerationAfterEviction()
+                    if (!isIndependentSession) {
+                      if (!evictSession(
+                        profileSessionId,
+                        profileScopedCwd,
+                        lineageMessages,
+                        mappingExpectedGeneration,
+                      )) throw new Error("Session mapping changed before model fallback eviction")
+                      mappingExpectedGeneration = refreshGenerationAfterEviction()
+                    }
                     await replaceWithFreshTarget("non_stream_model_fallback")
                     currentSessionId = managedForkTarget?.sessionId
                     sdkUuidMap.length = 0
@@ -5212,16 +5226,18 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                         rollbackUuid: undoRollbackUuid,
                         resumeSessionId,
                       })
-                      plog(`[PROXY] ${requestMeta.requestId} session unusable (${refusal}), evicting and replaying as fresh session`)
+                      plog(`[PROXY] ${requestMeta.requestId} session unusable (${refusal}), replaying as fresh session`)
                       managedForkSuperseded = true
                       await abandonManagedFork("resume_replay")
-                      if (!evictSession(
-                        profileSessionId,
-                        profileScopedCwd,
-                        lineageMessages,
-                        mappingExpectedGeneration,
-                      )) throw new Error("Session mapping changed before resume fallback eviction")
-                      mappingExpectedGeneration = refreshGenerationAfterEviction()
+                      if (!isIndependentSession) {
+                        if (!evictSession(
+                          profileSessionId,
+                          profileScopedCwd,
+                          lineageMessages,
+                          mappingExpectedGeneration,
+                        )) throw new Error("Session mapping changed before resume fallback eviction")
+                        mappingExpectedGeneration = refreshGenerationAfterEviction()
+                      }
                       await replaceWithFreshTarget("stream_resume_replay")
                       currentSessionId = managedForkTarget?.sessionId
                       sdkUuidMap.length = 0
@@ -5272,13 +5288,15 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                       plog(`[PROXY] ${requestMeta.requestId} extra usage persisted on resumed ${model}, retrying as fresh session`)
                       managedForkSuperseded = true
                       await abandonManagedFork("fresh_model_fallback")
-                      if (!evictSession(
-                        profileSessionId,
-                        profileScopedCwd,
-                        lineageMessages,
-                        mappingExpectedGeneration,
-                      )) throw new Error("Session mapping changed before model fallback eviction")
-                      mappingExpectedGeneration = refreshGenerationAfterEviction()
+                      if (!isIndependentSession) {
+                        if (!evictSession(
+                          profileSessionId,
+                          profileScopedCwd,
+                          lineageMessages,
+                          mappingExpectedGeneration,
+                        )) throw new Error("Session mapping changed before model fallback eviction")
+                        mappingExpectedGeneration = refreshGenerationAfterEviction()
+                      }
                       await replaceWithFreshTarget("stream_model_fallback")
                       currentSessionId = managedForkTarget?.sessionId
                       sdkUuidMap.length = 0
@@ -7875,8 +7893,13 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
           // controller's signal.
           sessionTreeRegistration = processSessionTree.register({
             requestId,
-            sessionKey: agentSessionId,
-            parentKey: adapter.getParentSessionId?.(c, body),
+            // The adapter's key still names the conversation everywhere else.
+            // In the live cancellation tree a side call is a private leaf:
+            // main cancellation reaches it, its own cancellation reaches no
+            // main/subagent descendants, and a declared ancestor reaches both.
+            sessionKey: auxiliaryRequest ? `auxiliary:${randomUUID()}` : agentSessionId,
+            parentKey: auxiliaryRequest ? agentSessionId : adapter.getParentSessionId?.(c, body),
+            additionalParentKey: auxiliaryRequest ? adapter.getParentSessionId?.(c, body) : undefined,
             abort: (reason) => {
               // A parent cancellation reaches this request through the
               // session tree; classify it distinctly from the watchdog,
@@ -7885,7 +7908,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
               turnWatchdogAbort.abort(reason)
             },
           })
-          subtreeSessionKey = agentSessionId
+          subtreeSessionKey = auxiliaryRequest ? undefined : agentSessionId
           const clientSignal = c.req.raw.signal
           if (clientSignal.aborted) {
             cascadeSubtreeCancel("client_abort")
