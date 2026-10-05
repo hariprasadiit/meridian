@@ -1598,6 +1598,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
     return withClaudeLogContext({ requestId: requestMeta.requestId, endpoint: requestMeta.endpoint }, async () => {
       // Hoist adapter detection before try so it's available in the catch block for telemetry
       const adapter = detectAdapter(c)
+      const sessionNamespace = adapter.getSessionNamespace?.(c, options.body)
       const assertDurableWritesAllowed = (): void => {
         if (durableWritesRevoked) throw new Error("Proxy shutdown revoked this request's durable writes")
         if (requestAbort.controller.signal.aborted) {
@@ -1660,7 +1661,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
             // not be deleted merely to authorize a noncanonical terminal.
             return false
           }
-          const evicted = evictCachedSession(...args)
+          const evicted = evictCachedSession(args[0], args[1], args[2], args[3], sessionNamespace)
           if (!evicted && resumedMappingMayBeAdvanced) {
             requestMeta.retainSessionTurnFence?.()
           }
@@ -2005,6 +2006,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                     }
                     routeMappingIsCurrent = mapped.status === "found"
                       && mapped.generation === routeResult.assignment.mappingGeneration
+                      && mapped.session.keyNamespace === sessionNamespace
                     if (!routeMappingIsCurrent) {
                       // Never resume an unproved mapping generation. Only a fresh,
                       // trusted human-turn proof may atomically repair authority;
@@ -2618,9 +2620,15 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
         const isIndependentSession = independentCause !== undefined
         // Once per process: the operator cannot see this in success metrics.
         if (independentCause === "headerless-tool-result") warnHeaderlessToolLoopOnce(adapter.name)
-        const durableMappingAtTurn = durableMappingKey
+        const rawDurableMappingAtTurn = durableMappingKey
           ? lookupSharedSessionResult(durableMappingKey)
           : { status: "missing" as const }
+        // Preserve the slot generation for a fresh CAS, never the unproven
+        // SDK/checkpoint/recovery authority of an old raw reserved-prefix ID.
+        const durableMappingAtTurn = rawDurableMappingAtTurn.status === "found"
+          && rawDurableMappingAtTurn.session.keyNamespace !== sessionNamespace
+          ? { status: "missing" as const, generation: rawDurableMappingAtTurn.generation }
+          : rawDurableMappingAtTurn
         if (durableMappingAtTurn.status === "error") {
           throw new Error(`Shared session store is unavailable: ${durableMappingAtTurn.error.message}`)
         }
@@ -2650,7 +2658,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
           : durableMappingAtTurn.status === "found"
         let lineageResult: LineageResult = isIndependentSession
           ? { type: "diverged", reason: "independent-request" }
-          : lookupSession(profileSessionId, lineageMessages, profileScopedCwd)
+          : lookupSession(profileSessionId, lineageMessages, profileScopedCwd, sessionNamespace)
         // NOTE: agent-specific (opencode) — when OpenCode's chat.headers plugin
         // hook doesn't fire (category-dispatched or title-generation requests),
         // the request has no session header and falls through to fingerprint
@@ -4824,6 +4832,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                     managedForkTarget?.sessionId === currentSessionId ? managedForkSource : undefined,
                     mappingExpectedGeneration,
                     options.priorityPublication,
+                    sessionNamespace,
                       )
                         if (stored) {
                           mappingExpectedGeneration = stored
@@ -6048,6 +6057,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                     managedForkTarget?.sessionId === currentSessionId ? managedForkSource : undefined,
                     mappingExpectedGeneration,
                     options.priorityPublication,
+                    sessionNamespace,
                       )
                       if (stored) {
                         mappingExpectedGeneration = stored
@@ -6376,6 +6386,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                     recoveryForkSource,
                     mappingExpectedGeneration,
                     options.priorityPublication,
+                    sessionNamespace,
                       )
                       if (stored) {
                         mappingExpectedGeneration = stored
@@ -7119,6 +7130,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                     managedForkTarget?.sessionId === currentSessionId ? managedForkSource : undefined,
                     mappingExpectedGeneration,
                     options.priorityPublication,
+                    sessionNamespace,
                       )
                       if (stored) {
                         mappingExpectedGeneration = stored
@@ -7907,6 +7919,9 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
             sessionKey: auxiliaryRequest ? `auxiliary:${randomUUID()}` : agentSessionId,
             parentKey: auxiliaryRequest ? agentSessionId : adapter.getParentSessionId?.(c, body),
             additionalParentKey: auxiliaryRequest ? adapter.getParentSessionId?.(c, body) : undefined,
+            explicitCancelKey: auxiliaryRequest ? undefined : adapter.getSessionCancelKey?.(c, body),
+            explicitRootKey: adapter.getRootSessionCancelKey?.(c, body) ?? adapter.getRootSessionId?.(c, body),
+            explicitRootSessionKey: adapter.getRootSessionId?.(c, body),
             abort: (reason) => {
               // A parent cancellation reaches this request through the
               // session tree; classify it distinctly from the watchdog,
