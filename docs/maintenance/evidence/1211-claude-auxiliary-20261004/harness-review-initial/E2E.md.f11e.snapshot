@@ -13,57 +13,9 @@ See [durable before/after and negative controls](docs/maintenance/evidence/1262-
 
 Live tests against the real proxy + Claude Max SDK. These verify the full request cycle that unit tests (mocked SDK) cannot cover.
 
-**Prerequisites:** Claude Max subscription, `claude auth status` shows `loggedIn: true`, `opencode` installed with the generation-matching Meridian OpenCode plugin. Successful auth readiness does not establish model access.
+**Prerequisites:** Claude Max subscription, `claude auth status` shows `loggedIn: true`, `opencode` installed.
 
 > **Droid tests (D1–D10)** additionally require `droid` installed (`droid --version` ≥ 0.89.0) and a Factory AI account for BYOK configuration. Tests D1–D10 cover internal mode (the default). Passthrough mode for Droid is opt-in via `MERIDIAN_PASSTHROUGH=1` and requires `droid` ≥ 0.109 — see "Droid passthrough mode" below.
-
-## Required Meridian OpenCode plugin preflight
-
-Every actual OpenCode live test against Claude must load the **Meridian OpenCode
-client plugin**, including tiny entitlement probes, login diagnostics and before/after controls.
-Carry this requirement into every delegated test brief. Raw HTTP or direct SDK
-probes can supply separate diagnostic evidence; they cannot establish the actual
-OpenCode flow. Manually supplying Meridian headers does not prove plugin use.
-
-1. Pin the affected OpenCode executable/version and Meridian source or installed
-   package. Use disposable client HOME, XDG state, config and project directories
-   so another installation or owner configuration cannot supply the plugin.
-2. Run the tested Meridian CLI's `setup --v1` or `setup --v2` in that isolated
-   client environment. For V2, pass `--opencode-bin <absolute-client-path>`;
-   setup rejects hosts outside that build's supported version list. Verify V1's
-   executable/version separately: `--v1` forces the generation without probing it.
-   An installed `dist/cli.js` selects `dist/meridian` for V1 or
-   `dist/meridian-v2` for V2. Source setup selects `plugin/meridian` or
-   `plugin/meridian-v2`. Use the matching arm's plugin in each comparison.
-3. Assert the effective config resolves exactly one Meridian entry to that
-   expected package, with V1's `plugin` or V2's canonical `plugins` field.
-   Stop on missing, duplicate, stale or wrong-generation entries. Separately
-   required scrub plugins may coexist. `E2E_PLUGIN_PATH` in several older
-   harnesses names the **scrub** plugin; setting it alone does not install or
-   prove the Meridian client plugin. Confirm the provider's `baseURL` targets
-   the selected Meridian proxy or recording relay at the flow's API prefix.
-4. Before inference, retain a sanitized plugin-load witness. For positive V2
-   catalog-discovery gates, require the client plugin to fetch Meridian's
-   `/v1/models`
-   and adopt the advertised model/window; a manual fetch or hardcoded client
-   window is insufficient. Declared discovery-failure controls must instead
-   retain their expected non-adoption or fail-closed outcome. During the bounded
-   actual-client request, retain
-   the proxy route and plugin-generated session/agent headers, plus the signed
-   `x-meridian-opencode-turn` header when required by the tested flow. Record
-   versions, resolved plugin path/package identity and these observations,
-   without credentials, attestation keys or raw customer transcripts.
-
-Before requesting a login refresh or attributing a refusal to credentials,
-verify those plugin and route facts. Preserve the exact observed HTTP status
-and sanitized provider diagnostic, and distinguish readiness from inference.
-An HTTP 400 mentioning `extra usage` is a refused attempt, not a valid model
-completion or proof of a particular credential failure. Stop that test arm
-when its required completion is missing and retain the open acceptance gate.
-
-Antigravity uses the documented [`setup --antigravity` provider integration](docs/antigravity.md)
-and its own actual-client witnesses. Claude's plugin header checks do not prove
-that separate provider path.
 
 ## Large session-store mutation and actual OpenCode continuation
 
@@ -6044,22 +5996,15 @@ keeps acceptance closed.
 The sanitized `claude-auto-mode-results.json` contains only identities,
 protocol enums/counters, booleans and SDK completion/model/cost facts. It saves
 no generated prose, raw provider errors, tokens or private SDK transcripts.
-The result file is reserved exclusively as a private, owned, single-link
-descriptor before setup. Existing files or links are rejected without
-overwriting their targets; use a fresh proof directory for each attempt.
 A relay request ID matches each wire request to exactly one adapter decision;
 equal aggregate classifier counts cannot satisfy isolation. A fixed pass
 requires actual classifier traffic on both shape and header paths, zero
 classifier session-turn wait with adequate SDK capacity, every later main
 request resuming, no collision/refusal, successful client turns/tool writes
 and positive assistant usage from the exact required served model. A normal
-successful SDK result with boolean `is_error: false` is required unless the
-one-turn passthrough cap ends with `error_max_turns`, boolean `is_error: true`
-and the same query's tool IDs/arguments match a complete HTTP tool terminal
-for the owned outside write. SDK tool IDs cannot be shared between queries or
-repeated in different HTTP terminals. SSE tool receipts require message start,
-closed blocks before the terminal delta, and message stop, with no later
-content. Missing/unclosed terminals,
+successful SDK result is required unless the one-turn passthrough cap ends
+with `error_max_turns` and the same query's tool IDs/arguments match a complete
+HTTP tool terminal for the owned outside write. Missing/unclosed terminals,
 provider refusals and other SDK error results fail. Baseline wait is measured
 without weakening the fixed zero-wait assertion. Copy this result into durable
 review evidence after a native run; a temporary directory or synthetic green
