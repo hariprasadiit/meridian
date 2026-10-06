@@ -47,6 +47,11 @@ cache rates can remain lower than main-turn rates because classifier calls and
 new agents contribute cache creation. This does not guarantee account-policy
 compatibility or resolve upstream rate limits and refusals.
 
+For this deployment, set the existing server option
+`MERIDIAN_DEFER_TOOL_THRESHOLD=0` to disable automatic tool deferral. Native
+E71/E72 then retain one generated message per tested tool request. Explicit
+client-deferred tools retain upstream behavior. This requires no client setting.
+
 ## Verification
 
 Run `npm test`, `npm run typecheck`, and `npm run build`. Native-key tests cover
@@ -54,3 +59,6 @@ both header formats, unchanged bodies, admin separation, migration, persistence,
 revocation, corrupt stores, input bounds and browser-origin checks. The source
 includes E71/E72 actual-client harnesses and the E41 four-way passthrough matrix.
 Deployment-specific live results are recorded separately after execution.
+
+`live-verification.json` contains the sanitized deployment results. The native
+proofs used Linux ARM64; they do not establish the upstream Linux x64 release gate.

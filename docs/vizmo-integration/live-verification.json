@@ -1,0 +1,150 @@
+{
+  "runtimeSource": "86fceaf785e1a97fbc592b5d33877a081e46964b",
+  "harnessSource": "69d37059",
+  "platform": "Linux ARM64",
+  "serverDeferToolThreshold": 0,
+  "nativeVersions": {
+    "client": "2.1.287",
+    "sdk": "0.2.141",
+    "nativeCli": "2.1.284"
+  },
+  "compiledRuntimeMatches": {
+    "javascriptFiles": 37,
+    "identical": true
+  },
+  "unitGates": {
+    "command": "npm test",
+    "exitCode": 0,
+    "platform": "Linux ARM64 / Node 22 / Bun 1.3.14",
+    "totalsAcrossIsolatedBatches": {
+      "pass": 5547,
+      "skip": 2,
+      "fail": 0
+    },
+    "harnessFragmentControls": {
+      "pass": 2,
+      "fail": 0
+    },
+    "typecheck": "pass",
+    "certifiedBuild": "pass"
+  },
+  "opusProductionCli": {
+    "cliVersion": "2.1.287",
+    "model": "claude-opus-5-5",
+    "effort": "xhigh",
+    "thinkingWorkaround": false,
+    "headless": {
+      "realReadToolAndArithmeticVerified": true,
+      "httpStatuses": [
+        200,
+        200
+      ],
+      "numTurns": 2,
+      "usage": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 176,
+          "cache_read_input_tokens": 0,
+          "cache_creation_input_tokens": 24513
+        },
+        {
+          "input_tokens": 4,
+          "output_tokens": 18,
+          "cache_read_input_tokens": 24513,
+          "cache_creation_input_tokens": 220
+        }
+      ]
+    },
+    "interactive": {
+      "thinking": {
+        "type": "adaptive",
+        "display": "updates"
+      },
+      "effort": "xhigh",
+      "httpStatus": 200,
+      "completed": 1,
+      "errors": []
+    }
+  },
+  "E41": {
+    "model": "claude-opus-5-5",
+    "matrix": [
+      "sequential JSON",
+      "sequential stream",
+      "parallel JSON",
+      "parallel stream"
+    ],
+    "result": "PASS",
+    "priorPrefixReusedEveryContinuation": true,
+    "followupCacheReadPercent": 98
+  },
+  "keyUi": {
+    "legacyHashesImportedUnchanged": 4,
+    "legacyRawCredentialsExercised": 3,
+    "productionChecks": 43,
+    "revocationPersists": true,
+    "browserFixtureWidths": [
+      320,
+      768,
+      1024,
+      1440
+    ]
+  },
+  "E71": {
+    "result": "PASS",
+    "acceptance": true,
+    "checks": {
+      "invocationsSucceeded": true,
+      "turnsAnswered": true,
+      "outsideToolWrites": true,
+      "noRefusal": true,
+      "classifierOccurred": true,
+      "shapeHeadersAbsent": true,
+      "headerPathPresent": true,
+      "wireRequestedModel": true,
+      "requestDecisionsComplete": true,
+      "shapeIsolation": true,
+      "headerIsolation": true,
+      "nonAuxiliaryPreserved": true,
+      "auxiliaryZeroLeaseWait": true,
+      "mainResume": true,
+      "noCollision": true,
+      "requestModelOwnership": true,
+      "nativeReceipts": true,
+      "costBound": true
+    },
+    "serverDeferToolThreshold": 0,
+    "ownerGrantUnchanged": true,
+    "privateRuntimeRemoved": true,
+    "cleanupFailures": [],
+    "sdkQueries": 10
+  },
+  "E72": {
+    "result": "PASS",
+    "acceptance": true,
+    "checks": {
+      "invocationsSucceeded": true,
+      "turnsAnswered": true,
+      "noRefusal": true,
+      "requestedModelIdentity": true,
+      "rootedWireIdentity": true,
+      "requestDecisionsComplete": true,
+      "twoMultiturnAgents": true,
+      "foregroundParallelism": true,
+      "actualAgentAndBashReceipts": true,
+      "allQueriesCorrelated": true,
+      "distinctSessionMappings": true,
+      "subagentResume": true,
+      "mainResume": true,
+      "noCollision": true,
+      "boundedLeaseWait": true,
+      "nativeReceipts": true,
+      "costBound": true
+    },
+    "serverDeferToolThreshold": 0,
+    "ownerGrantUnchanged": true,
+    "privateRuntimeRemoved": true,
+    "cleanupFailures": [],
+    "sdkQueries": 9
+  }
+}
