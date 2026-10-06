@@ -41,6 +41,7 @@ interface Received {
 let collector: ReturnType<typeof Bun.serve>
 const received: Received[] = []
 let collectorStatuses: number[] = []
+let collectorResponseDelayMs = 0
 let dirs: string[] = []
 
 beforeAll(() => {
@@ -49,6 +50,7 @@ beforeAll(() => {
     port: 0,
     async fetch(request) {
       received.push({ path: new URL(request.url).pathname, auth: request.headers.get("x-sentry-auth"), body: await request.text() })
+      if (collectorResponseDelayMs > 0) await Bun.sleep(collectorResponseDelayMs)
       return new Response("{}", { status: collectorStatuses.shift() ?? 200 })
     },
   })
@@ -61,6 +63,7 @@ afterAll(() => {
 afterEach(() => {
   received.length = 0
   collectorStatuses = []
+  collectorResponseDelayMs = 0
   for (const dir of dirs) rmSync(dir, { recursive: true, force: true })
   dirs = []
 })
@@ -275,6 +278,7 @@ describe("in a real process", () => {
   })
 
   it("a crash still crashes, exactly as without the reporter, and the fatal event is delivered after the process is gone", async () => {
+    collectorResponseDelayMs = 100
     const spool = join(tempDir(), "spool")
     const baseline = await runChild({ REPORTER_SPOOL: join(tempDir(), "unused"), REPORTER_FAIL: "throw" })
     const crashed = await runChild({ REPORTER_DSN: liveDsn(), REPORTER_SPOOL: spool, REPORTER_FAIL: "throw" })
@@ -282,7 +286,9 @@ describe("in a real process", () => {
     expect(crashed.code).toBe(baseline.code)
     expect(crashed.stderr).toContain("thrown")
 
-    await waitFor(() => received.length === 1 && spooled(spool).length === 0)
+    // The detached sender renames .json to .sending before receipt and removes
+    // that claim only after the collector responds. Wait for both stages.
+    await waitFor(() => received.length === 1 && (!existsSync(spool) || readdirSync(spool).length === 0))
     expect(received).toHaveLength(1)
     const event = eventOf(received[0]!.body)
     expect(event.level).toBe("fatal")
