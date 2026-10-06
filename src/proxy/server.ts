@@ -98,6 +98,8 @@ import { flattenAssistantContent, normalizeStructuredUserContent, replayToolResu
 import { unstreamedAssistantBlockFrames } from "./unstreamedAssistant"
 import { extractAdvisorModel, extractSystemText, getLastUserMessage, stripAdvisorTools, stripNonStandardStreamFields, MULTIMODAL_TYPES, buildToolUseIndex, frameReplayTurns } from "./messages"
 import { requireAuth, authEnabled } from "./auth"
+import { clientKeyResponse } from "../clientKeyRoutes"
+import { keysPageHtml } from "../telemetry/keysPage"
 import { detectAdapter } from "./adapters/detect"
 import { rootSessionIdOf } from "./adapter"
 import { buildQueryOptions, isCliThinkingDisplay, resolveQueryConfigDir, singleTurnCapLiftRaisesBudget, type QueryContext } from "./query"
@@ -1074,6 +1076,8 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
   app.use("/plugins", requireAuth)
   app.use("/settings/*", requireAuth)
   app.use("/settings", requireAuth)
+  app.use("/keys", requireAuth)
+  app.use("/keys/*", requireAuth)
   app.use("/design-login", requireAuth)
   app.use("/providers", requireAuth)
   app.use("/providers/*", requireAuth)
@@ -8117,6 +8121,11 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
   }))
 
   // SDK Features settings page and API
+  app.get("/keys", (c) => { c.header("Cache-Control", "no-store"); return c.html(withSavedLayout(keysPageHtml)) })
+  app.get("/keys/api", (c) => clientKeyResponse(c.req.raw))
+  app.post("/keys/api", (c) => clientKeyResponse(c.req.raw))
+  app.delete("/keys/api/:id", (c) => clientKeyResponse(c.req.raw, c.req.param("id")))
+
   app.get("/settings", (c) => {
     const { settingsPageHtml } = require("../telemetry/settingsPage") as typeof import("../telemetry/settingsPage")
     return c.html(withSavedLayout(settingsPageHtml))

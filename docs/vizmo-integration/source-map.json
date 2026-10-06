@@ -1,0 +1,153 @@
+{
+  "base": "338630adb2832381e7ddfcee7bb8567e61cc9293",
+  "correctionSource": "a25ea62b0871338a085d6cf9b94d67a9037a4688",
+  "commits": [
+    {
+      "source": "8f77580fc32c9e9f9bc3ffdf68ec4ed33f730884",
+      "incorporated": "6ba8b38b710beb108fd0d5833430b6dde63cd34e",
+      "author": "Noah Passalacqua",
+      "authorDate": "2026-09-30T19:13:30-05:00",
+      "subject": "fix(session): add an auxiliary-request independence cause"
+    },
+    {
+      "source": "aea593ecbd2bcbcb23b7651ccd226bd78854a596",
+      "incorporated": "b90404658780cc91cb3fefc13a177d4904fe439e",
+      "author": "Noah Passalacqua",
+      "authorDate": "2026-09-30T19:16:40-05:00",
+      "subject": "fix(claude-code): detect auto-mode classifier side requests"
+    },
+    {
+      "source": "cb6c92c4a6c388c61f9e412f9809250210c0a5e7",
+      "incorporated": "fc4d6e1664608de242eb39716d8024b683a7a332",
+      "author": "Noah Passalacqua",
+      "authorDate": "2026-09-30T19:20:53-05:00",
+      "subject": "fix(session): keep Claude Code classifier requests off the session mapping and lease"
+    },
+    {
+      "source": "734f543f42c5e253048c5d56cea697d897b30479",
+      "incorporated": "84950dee72a1ee63a524066a87352493b88174b3",
+      "author": "Noah Passalacqua",
+      "authorDate": "2026-09-30T19:37:55-05:00",
+      "subject": "test: live gate for Claude Code auto-mode session isolation"
+    },
+    {
+      "source": "af0fad6318011520d54460dc2f11075e402a1009",
+      "incorporated": "e46a23e71f862e15891c9162db176e83f77935d3",
+      "author": "Noah Passalacqua",
+      "authorDate": "2026-09-30T21:11:01-05:00",
+      "subject": "docs: record live acceptance and correct the auxiliary hook contract"
+    },
+    {
+      "source": "f11e60e5b2480bd76a6d5921b8386f58ae53856c",
+      "incorporated": "a438bc7a9b870f516b1ebaef0a627415840b3590",
+      "author": "Trevor Walker",
+      "authorDate": "2026-10-04T19:54:35-06:00",
+      "subject": "fix: preserve conversation authority across Claude side calls"
+    },
+    {
+      "source": "885b4005eda2567b390ab962624954ce0dd5cb5a",
+      "incorporated": "b452939857e8d49bed44f6ff38858256e92b2008",
+      "author": "Trevor Walker",
+      "authorDate": "2026-10-04T20:06:22-06:00",
+      "subject": "test: require trustworthy Claude auxiliary live receipts"
+    },
+    {
+      "source": "72b766b497eaf96069c6633499ac813e58908e1d",
+      "incorporated": "57a453efe340565d9d44fab1d6719296b26d4ec9",
+      "author": "Trevor Walker",
+      "authorDate": "2026-10-04T22:20:44-06:00",
+      "subject": "test: verify Claude auto-mode model ownership and cleanup"
+    },
+    {
+      "source": "a088de329febb62b147eb4af82f570ccf3b879bc",
+      "incorporated": "da7339dee4cb687848a79b8d2bd1e6feb2402899",
+      "author": "Trevor Walker",
+      "authorDate": "2026-10-04T22:27:27-06:00",
+      "subject": "test: guard certified artifact hashes before comparison"
+    },
+    {
+      "source": "9e81e4ca7e95dd762b07b2eb3a49e480a500bcfd",
+      "incorporated": "d44f7d460535ba5e643782b962446f7caac7d07d",
+      "author": "Noah Passalacqua",
+      "authorDate": "2026-10-01T15:18:19-05:00",
+      "subject": "refactor(routing): route accounts by the conversation's root session key"
+    },
+    {
+      "source": "683e8fefb8d2552eb2e142db0c43860983fff213",
+      "incorporated": "39146d4fe30e3f4b65774558837a73f4b9db5539",
+      "author": "Noah Passalacqua",
+      "authorDate": "2026-10-01T15:31:47-05:00",
+      "subject": "fix(claude-code): key each Agent-tool subagent apart from its parent session"
+    },
+    {
+      "source": "c0ec5e2a6b0fb84b318b4a9de757082e54cf59c3",
+      "incorporated": "53df826cbd1ed5e3488bb9c8103646e9c000ada2",
+      "author": "Noah Passalacqua",
+      "authorDate": "2026-10-01T15:34:24-05:00",
+      "subject": "test: live gate for Claude Code subagent session isolation"
+    },
+    {
+      "source": "04bd6d0eeba55189315cafe8540890ccbea3b004",
+      "incorporated": "febb2334f4b61d1f7e758ccc8c4f4c15c5237d38",
+      "author": "Noah Passalacqua",
+      "authorDate": "2026-10-01T15:51:19-05:00",
+      "subject": "test: type the Claude Code subagent key test context"
+    },
+    {
+      "source": "f03928f8cc511624de0503642954c0f0492fe9cf",
+      "incorporated": "48e9d9a0ba98ae200839c2b4ef49bcfb9a1fb5a4",
+      "author": "Noah Passalacqua",
+      "authorDate": "2026-10-01T15:56:41-05:00",
+      "subject": "docs: note the backgrounded Claude Code session replay limitation"
+    },
+    {
+      "source": "d8a08920b3a3bd6d11cb54946acca3e78f2bb3e3",
+      "incorporated": "d3635d4b4f8bd7bd64b347cb9dc3e7f9e2b53eec",
+      "author": "Trevor Walker",
+      "authorDate": "2026-10-04T20:52:27-06:00",
+      "subject": "fix: isolate native Claude agents and preserve root cancellation"
+    },
+    {
+      "source": "ecd9930e41684b5dba86b4a9c85d3de274db18f4",
+      "incorporated": "1e6a66ae9b28787051c49e5ff37e15343750e47f",
+      "author": "Trevor Walker",
+      "authorDate": "2026-10-04T20:54:19-06:00",
+      "subject": "fix: keep mapping ownership out of public lineage state"
+    },
+    {
+      "source": "9a3c21ece99246dbbd503c8a641c70bdbe9419c9",
+      "incorporated": "061d9d96f5797835b6511f688b9aa80d00e79d7f",
+      "author": "Trevor Walker",
+      "authorDate": "2026-10-04T20:56:40-06:00",
+      "subject": "test: fence private mapping namespace fallback"
+    },
+    {
+      "source": "22619b95785667455610364dd31cff07d82ac014",
+      "incorporated": "5258e09e16ee21fb9729e2ea81dd6a12ffafc304",
+      "author": "Trevor Walker",
+      "authorDate": "2026-10-04T21:01:33-06:00",
+      "subject": "fix: keep native agent tuple keys scalar compatible"
+    },
+    {
+      "source": "7f88994cb0a49c902f234cdd98107a151b66a5c2",
+      "incorporated": "9fce20d28fa9e14a56ace603d93eb590a129cf92",
+      "author": "Trevor Walker",
+      "authorDate": "2026-10-04T21:02:21-06:00",
+      "subject": "test: prepare bounded native Agent session proof"
+    },
+    {
+      "source": "2c954221fa37118b70eb5163ce0feacba673b566",
+      "incorporated": "9147555b7e9886086acddafe861c00d6579024eb",
+      "author": "Trevor Walker",
+      "authorDate": "2026-10-04T21:03:36-06:00",
+      "subject": "test: close the synthetic stream block explicitly"
+    },
+    {
+      "source": "1f754311a28fb148de5b04127761c2bb13d849d2",
+      "incorporated": "0c5154443dbb2ba2df075e76914dd8afb4b0863a",
+      "author": "Trevor Walker",
+      "authorDate": "2026-10-04T22:16:43-06:00",
+      "subject": "fix: validate subagent harness snapshots before reading"
+    }
+  ]
+}
