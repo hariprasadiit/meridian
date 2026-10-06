@@ -53,7 +53,7 @@ ${profileBarHtml}
 </section>
 <section class="card" aria-labelledby="list-title"><div class="list-heading"><h2 id="list-title">Active keys</h2><button id="refresh" type="button">Refresh</button></div>
 <p id="empty" class="note">Loading keys…</p><ul id="keys" class="key-list"></ul></section>
-<p class="note">Changes apply immediately. Revoking a key prevents new requests; requests already running can finish.</p>
+<p class="note">Revoking a key deletes it and frees its name. New requests are rejected; requests already running can finish.</p>
 </main>
 <dialog id="created-dialog" aria-labelledby="created-title"><h2 id="created-title">Your key is ready</h2>
 <p>Copy it now. Meridian stores its hash and cannot show this key again.</p>
@@ -90,7 +90,7 @@ ${profileBarJs}
         var badge = document.createElement('span'); badge.className = 'status'; badge.textContent = 'Active';
         row.append(details, badge);
         var button = document.createElement('button'); button.className = 'danger'; button.textContent = 'Revoke'; button.setAttribute('aria-label', 'Revoke ' + key.name);
-        button.addEventListener('click', function() { revokeTarget = key; document.getElementById('revoke-description').textContent = key.name + ' will stop accepting new API requests.'; revokeDialog.showModal(); }); row.append(button);
+        button.addEventListener('click', function() { revokeTarget = key; document.getElementById('revoke-description').textContent = key.name + ' will be deleted and stop accepting new API requests. You can reuse this name.'; revokeDialog.showModal(); }); row.append(button);
         list.append(row);
       });
     } catch (error) { status(error.message, true); empty.textContent = 'Unable to load keys. Try Refresh.'; }
@@ -115,7 +115,7 @@ ${profileBarJs}
   document.getElementById('cancel-revoke').addEventListener('click', function() { revokeDialog.close(); });
   document.getElementById('confirm-revoke').addEventListener('click', async function() {
     var button = document.getElementById('confirm-revoke'); button.disabled = true;
-    try { await api('/' + encodeURIComponent(revokeTarget.id), { method: 'DELETE' }); revokeDialog.close(); status('Key revoked.'); await load(); }
+    try { await api('/' + encodeURIComponent(revokeTarget.id), { method: 'DELETE' }); revokeDialog.close(); status('Key revoked and deleted.'); await load(); }
     catch (error) { revokeDialog.close(); status(error.message, true); }
     finally { button.disabled = false; }
   });

@@ -78,11 +78,15 @@ function load(): Registry {
     || new Set(registry.keys.map(key => key.id)).size !== registry.keys.length) {
     throw new Error("Invalid client key registry")
   }
+  // Migrate earlier revocation records without removing the authoritative file:
+  // an empty registry must not re-import old environment credentials.
+  const active = registry.keys.filter(key => key.revokedAt === null)
+  if (active.length !== registry.keys.length) { registry.keys = active; save(registry) }
   return registry
 }
 
 const publicInfo = ({ id, name, createdAt, revokedAt }: StoredKey): ClientKeyInfo => ({ id, name, createdAt, revokedAt })
-export function listClientKeys(): ClientKeyInfo[] { return load().keys.filter(key => key.revokedAt === null).map(publicInfo) }
+export function listClientKeys(): ClientKeyInfo[] { return load().keys.map(publicInfo) }
 
 /** Synchronous read/mutate/rename keeps writes serialized in the single Meridian server process. */
 export function createClientKey(name: unknown): { key: string; credential: ClientKeyInfo } {
@@ -101,8 +105,9 @@ export function revokeClientKey(id: string): ClientKeyInfo {
   const registry = load()
   const key = registry.keys.find(key => key.id === id)
   if (!key) throw new ClientKeyError("Key not found", 404)
-  if (key.revokedAt === null) { key.revokedAt = new Date().toISOString(); save(registry) }
-  return publicInfo(key)
+  registry.keys = registry.keys.filter(key => key.id !== id)
+  save(registry)
+  return publicInfo({ ...key, revokedAt: new Date().toISOString() })
 }
 
 export function hasValidClientKey(provided: string): boolean {

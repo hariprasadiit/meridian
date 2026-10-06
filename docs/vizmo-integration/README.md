@@ -30,9 +30,11 @@ leaving the old seed in the environment cannot resurrect revoked keys. Do not
 delete the registry as a means of restarting the service. A malformed registry
 fails closed for client authentication and returns a generic service error.
 
-The key list shows active credentials only. Revoked records remain stored so
-they cannot be resurrected. Key names are unique regardless of capitalization,
-including names used by revoked keys; use a new name for a replacement.
+The key list shows active credentials only. Revocation permanently removes the
+credential record and frees its name for a new key. Names of active keys are
+unique regardless of capitalization. Earlier revoked records are purged on the
+next registry operation. The registry file remains present even when empty, so
+old environment credentials cannot be imported again.
 
 ## Cache behavior
 
