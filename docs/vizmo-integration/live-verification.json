@@ -1,0 +1,743 @@
+{
+  "runtimeSource": "86fceaf785e1a97fbc592b5d33877a081e46964b",
+  "harnessSource": "69d37059",
+  "platform": "Linux ARM64",
+  "serverDeferToolThreshold": 0,
+  "nativeVersions": {
+    "client": "2.1.287",
+    "sdk": "0.2.141",
+    "nativeCli": "2.1.284"
+  },
+  "compiledRuntimeMatches": {
+    "javascriptFiles": 37,
+    "identical": true
+  },
+  "unitGates": {
+    "command": "npm test",
+    "exitCode": 0,
+    "platform": "Linux ARM64 / Node 22 / Bun 1.3.14",
+    "totalsAcrossIsolatedBatches": {
+      "pass": 5547,
+      "skip": 2,
+      "fail": 0
+    },
+    "harnessFragmentControls": {
+      "pass": 2,
+      "fail": 0
+    },
+    "typecheck": "pass",
+    "certifiedBuild": "pass"
+  },
+  "opusProductionCli": {
+    "cliVersion": "2.1.287",
+    "model": "claude-opus-5-5",
+    "effort": "xhigh",
+    "thinkingWorkaround": false,
+    "headless": {
+      "realReadToolAndArithmeticVerified": true,
+      "httpStatuses": [
+        200,
+        200
+      ],
+      "numTurns": 2,
+      "usage": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 176,
+          "cache_read_input_tokens": 0,
+          "cache_creation_input_tokens": 24513
+        },
+        {
+          "input_tokens": 4,
+          "output_tokens": 18,
+          "cache_read_input_tokens": 24513,
+          "cache_creation_input_tokens": 220
+        }
+      ]
+    },
+    "interactive": {
+      "thinking": {
+        "type": "adaptive",
+        "display": "updates"
+      },
+      "effort": "xhigh",
+      "httpStatus": 200,
+      "completed": 1,
+      "errors": []
+    }
+  },
+  "E41": {
+    "model": "claude-opus-5-5",
+    "matrix": [
+      "sequential JSON",
+      "sequential stream",
+      "parallel JSON",
+      "parallel stream"
+    ],
+    "result": "PASS",
+    "priorPrefixReusedEveryContinuation": true,
+    "followupCacheReadPercent": 98
+  },
+  "keyUi": {
+    "legacyHashesImportedUnchanged": 4,
+    "legacyRawCredentialsExercised": 3,
+    "productionChecks": 43,
+    "revocationPersists": true,
+    "browserFixtureWidths": [
+      320,
+      768,
+      1024,
+      1440
+    ]
+  },
+  "E71": {
+    "result": "PASS",
+    "acceptance": true,
+    "checks": {
+      "invocationsSucceeded": true,
+      "turnsAnswered": true,
+      "outsideToolWrites": true,
+      "noRefusal": true,
+      "classifierOccurred": true,
+      "shapeHeadersAbsent": true,
+      "headerPathPresent": true,
+      "wireRequestedModel": true,
+      "requestDecisionsComplete": true,
+      "shapeIsolation": true,
+      "headerIsolation": true,
+      "nonAuxiliaryPreserved": true,
+      "auxiliaryZeroLeaseWait": true,
+      "mainResume": true,
+      "noCollision": true,
+      "requestModelOwnership": true,
+      "nativeReceipts": true,
+      "costBound": true
+    },
+    "serverDeferToolThreshold": 0,
+    "ownerGrantUnchanged": true,
+    "privateRuntimeRemoved": true,
+    "cleanupFailures": [],
+    "sdkQueries": 10
+  },
+  "E72": {
+    "result": "PASS",
+    "acceptance": true,
+    "checks": {
+      "invocationsSucceeded": true,
+      "turnsAnswered": true,
+      "noRefusal": true,
+      "requestedModelIdentity": true,
+      "rootedWireIdentity": true,
+      "requestDecisionsComplete": true,
+      "twoMultiturnAgents": true,
+      "foregroundParallelism": true,
+      "actualAgentAndBashReceipts": true,
+      "allQueriesCorrelated": true,
+      "distinctSessionMappings": true,
+      "subagentResume": true,
+      "mainResume": true,
+      "noCollision": true,
+      "boundedLeaseWait": true,
+      "nativeReceipts": true,
+      "costBound": true
+    },
+    "serverDeferToolThreshold": 0,
+    "ownerGrantUnchanged": true,
+    "privateRuntimeRemoved": true,
+    "cleanupFailures": [],
+    "sdkQueries": 9
+  },
+  "opusHighProductionCli": {
+    "result": "PASS",
+    "date": "2026-10-06",
+    "platform": "Linux ARM64",
+    "cliVersion": "2.1.287",
+    "model": "claude-opus-5-5",
+    "effort": "high",
+    "thinkingWorkaround": false,
+    "clientBashPreflight": true,
+    "cases": {
+      "readTool": {
+        "pass": true,
+        "httpStatuses": [
+          200,
+          200
+        ],
+        "turnUsage": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 91,
+            "cache_read_input_tokens": 24513,
+            "cache_creation_input_tokens": 0
+          },
+          {
+            "input_tokens": 4,
+            "output_tokens": 48,
+            "cache_read_input_tokens": 24513,
+            "cache_creation_input_tokens": 135
+          }
+        ]
+      },
+      "resume": {
+        "pass": true,
+        "sameSession": true,
+        "turnUsage": [
+          {
+            "input_tokens": 4,
+            "output_tokens": 15,
+            "cache_read_input_tokens": 24648,
+            "cache_creation_input_tokens": 104
+          }
+        ]
+      },
+      "nativeAgents": {
+        "sameSession": true,
+        "nativeAgents": 2,
+        "agentLifetimesOverlap": true,
+        "httpRequestsOverlap": true,
+        "toolNames": [
+          "Agent",
+          "Agent",
+          "Bash",
+          "SubagentHandback",
+          "Bash",
+          "SubagentHandback"
+        ],
+        "classifierRequests": 4,
+        "actualAgentAndBashReceipts": true,
+        "childContinuationsCached": true,
+        "sharedRootIdentity": true
+      },
+      "interactive": {
+        "httpStatus": 200,
+        "effort": "high",
+        "thinking": {
+          "type": "adaptive",
+          "display": "updates"
+        },
+        "completed": 1,
+        "errors": [],
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 24,
+          "cache_read_input_tokens": 0,
+          "cache_creation_input_tokens": 28357
+        }
+      }
+    },
+    "warmHeadlessOpus": {
+      "input_tokens": 30,
+      "output_tokens": 1074,
+      "cache_read_input_tokens": 199157,
+      "cache_creation_input_tokens": 9858,
+      "inputCacheReadPercent": 95.2699
+    },
+    "nativeClassifiers": {
+      "input_tokens": 8,
+      "output_tokens": 36,
+      "cache_read_input_tokens": 205700,
+      "cache_creation_input_tokens": 3214,
+      "inputCacheReadPercent": 98.4578
+    },
+    "allRequests": {
+      "count": 15,
+      "http200": 15,
+      "errors": 0
+    },
+    "harnessSha256": "a36d6987161294d865958b91ee8c1ad484cfce5ebaccea9a7c435142cf13137c",
+    "bounds": [
+      "Warm headless sample is separate from the fresh interactive conversation, which created 28357 input cache tokens.",
+      "Interactive startup emitted a separate medium-effort Opus request; the actual interactive user request used high.",
+      "No production code, credentials, or service configuration changed during this verification.",
+      "This is deployed ARM64 CLI validation, not an upstream release or Linux x64 E71/E72 qualification."
+    ]
+  },
+  "sideEffectsReview": {
+    "runtimeSource": "86fceaf785e1a97fbc592b5d33877a081e46964b",
+    "base": "338630adb2832381e7ddfcee7bb8567e61cc9293",
+    "focusedTestFiles": 13,
+    "focusedTestsPass": 254,
+    "focusedTestsFail": 0,
+    "classifierMutationDetected": true,
+    "blockingRuntimeFinding": null,
+    "knownTradeoffs": [
+      "Automatic deferral disabled: larger tool catalogs increase initial schema input.",
+      "New background/fork agent IDs require an initial history replay.",
+      "Native classifier envelope requires revalidation after client changes.",
+      "UI registry authoritative after import; independent concurrent writers unsupported."
+    ],
+    "applicationCodeChangedForThisValidation": false
+  },
+  "activeKeyListUpdate": {
+    "date": "2026-10-06",
+    "runtimeSource": "f7e1ba2bd44d6a88d1e6503770724c439b5213ed",
+    "activeOnly": true,
+    "namesUniqueIgnoringCase": true,
+    "revokedNamesReserved": true,
+    "focusedTests": {
+      "pass": 11,
+      "fail": 0
+    },
+    "linuxGates": {
+      "passes": 5549,
+      "fails": 0,
+      "skips": 2,
+      "batches": 19,
+      "platform": "Linux ARM64",
+      "node": "22.23.3",
+      "bun": "1.3.14",
+      "npmTestExit": 0,
+      "typecheckExit": 0,
+      "buildExit": 0,
+      "imageBuildExit": 0,
+      "source": "f7e1ba2bd44d6a88d1e6503770724c439b5213ed"
+    },
+    "browserCreateRevokeReloadAndEmptyState": "PASS",
+    "productionChecks": 21,
+    "activeKeyCount": 4,
+    "existingRecordsUnchanged": true,
+    "compiledJavaScriptArtifactsMatched": 37,
+    "inferenceOrSessionChanges": false,
+    "liveModelQueriesRequired": false,
+    "supersededBy": "revokedKeyDeletionUpdate"
+  },
+  "currentRuntimeSource": "056688735f87028850d906a5637bf299bcb6a7e2",
+  "revokedKeyDeletionUpdate": {
+    "date": "2026-10-06",
+    "runtimeSource": "a665a20aa0b296190f27d084222bf8243e4dbde5",
+    "revokedRecordsDeleted": true,
+    "revokedNamesReusable": true,
+    "activeNamesUniqueIgnoringCase": true,
+    "authoritativeEmptyRegistryRetained": true,
+    "deletedEarlierRevokedCount": 5,
+    "activeKeyCount": 3,
+    "activeRecordsUnchanged": true,
+    "focusedTests": {
+      "pass": 12,
+      "fail": 0,
+      "beforePass": 7,
+      "beforeFail": 5
+    },
+    "linuxGates": {
+      "passes": 5550,
+      "fails": 0,
+      "skips": 2,
+      "batches": 19,
+      "platform": "Linux ARM64 / musl",
+      "node": "22.23.3",
+      "bun": "1.3.14",
+      "npmTestExit": 0,
+      "typecheckExit": 0,
+      "buildExit": 0,
+      "imageBuildExit": 0,
+      "runtimeSource": "a665a20aa0b296190f27d084222bf8243e4dbde5",
+      "gateSource": "cbe87df66d5fef0693e6b8b2c07f4b95fcb0d3d1",
+      "previousRuns": [
+        "Initial error-reporting cleanup race fixed and reproduced with delayed acknowledgment; see reporter-race.json",
+        "Bun native SIGTRAP/segfault, zero assertion failures; implicated file passed 24 cases in isolation and complete retry passed without exclusions; see bun-crash.json"
+      ]
+    },
+    "browserCreateRevokeReloadReuseAndActiveDuplicate": "PASS",
+    "productionChecks": 23,
+    "oldKeyRejectedAfterSameNameReplacement": true,
+    "newKeyAcceptedOnBothHostnamesAndHeaders": true,
+    "ownedProbesDeleted": true,
+    "compiledJavaScriptArtifactsMatched": 37,
+    "savedCoolifyConfigurationVerified": true,
+    "inferenceOrSessionChanges": false,
+    "liveModelQueriesRequired": false,
+    "gateCorrection": "Crash reporter test waits for collector acknowledgment and removal of .sending claim; no runtime reporter changes. Bun 1.3.14 native crash log preserved; isolated implicated file and complete unchanged runtime retry passed."
+  },
+  "apiKeyTelemetryFilterUpdate": {
+    "runtimeSource": "056688735f87028850d906a5637bf299bcb6a7e2",
+    "runtimeImage": "sha256:5d39278ee353cb215daeffc896b3a2065b7b6c175a400eb65fc55cdc8bceb04a",
+    "imageTag": "meridian:key-filter-056688735f87",
+    "unitGates": {
+      "result": "PASS",
+      "source": "056688735f87028850d906a5637bf299bcb6a7e2",
+      "npmTest": {
+        "passed": 5563,
+        "failed": 0,
+        "skipped": 2,
+        "attempts": 1,
+        "batches": 19
+      },
+      "typecheck": "PASS",
+      "build": "PASS",
+      "platform": "Linux ARM64 Alpine/musl",
+      "node": "v22.23.3",
+      "sdk": "0.2.141"
+    },
+    "compiledRuntimeMatches": {
+      "files": 37,
+      "independentlyBuiltGatedSourceAndActualDeployedImage": true
+    },
+    "browserFixture": {
+      "passed": true,
+      "checks": 25,
+      "viewports": [
+        320,
+        768,
+        1024,
+        1440
+      ],
+      "syntheticOnly": true,
+      "harness": "scripts/e2e-client-key-telemetry.mjs"
+    },
+    "realClaudeCode": {
+      "result": "PASS",
+      "checks": [
+        "expected-runtime-source",
+        "existing-active-credentials-preserved-before-probe",
+        "production-dashboard-has-api-key-selector",
+        "create-owned-key",
+        "create-owned-key",
+        "read-/telemetry/client-keys",
+        "unused-active-keys-in-selector",
+        "client-cannot-read-administrator-telemetry",
+        "native-cli-version",
+        "native-cli-inference-0",
+        "native-cli-resume",
+        "read-/telemetry/requests",
+        "key-0-attributed-records",
+        "key-0-real-claude-success",
+        "key-0-native-stream-passthrough",
+        "read-/telemetry/summary",
+        "key-0-summary-count",
+        "key-0-token-and-cache-totals",
+        "read-/telemetry/routes",
+        "key-0-routing-count",
+        "key-0-no-global-session-tree",
+        "native-cli-warm-continuation-retains-cache",
+        "no-client-thinking-workaround",
+        "native-cli-version",
+        "native-cli-inference-1",
+        "read-/telemetry/requests",
+        "key-1-attributed-records",
+        "key-1-real-claude-success",
+        "key-1-native-stream-passthrough",
+        "read-/telemetry/summary",
+        "key-1-summary-count",
+        "key-1-token-and-cache-totals",
+        "read-/telemetry/routes",
+        "key-1-routing-count",
+        "key-1-no-global-session-tree",
+        "no-client-thinking-workaround",
+        "read-/telemetry/requests",
+        "no-credential-or-digest-in-telemetry",
+        "read-/telemetry/requests",
+        "no-credential-or-digest-in-telemetry",
+        "read-/telemetry/summary",
+        "read-/telemetry/requests",
+        "unknown-key-does-not-return-all-usage",
+        "read-/telemetry/requests",
+        "unattributed-filter-contains-only-missing-identities",
+        "delete-owned-key",
+        "create-owned-key",
+        "same-name-replacement-keeps-distinct-id",
+        "read-/telemetry/client-keys",
+        "deleted-history-and-unused-replacement-separate",
+        "read-/telemetry/requests",
+        "replacement-does-not-inherit-old-usage",
+        "read-/telemetry/requests",
+        "deleted-key-usage-remains-readable",
+        "deleted-key-remains-rejected",
+        "owned-verification-key-cleaned-up",
+        "owned-verification-key-cleaned-up",
+        "original-active-key-registry-unchanged"
+      ],
+      "source": "056688735f87028850d906a5637bf299bcb6a7e2",
+      "image": "sha256:5d39278ee353cb215daeffc896b3a2065b7b6c175a400eb65fc55cdc8bceb04a",
+      "cliVersion": "2.1.287",
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "actualCli": true,
+      "usage": [
+        {
+          "case": "key-0",
+          "requests": 2,
+          "totals": {
+            "totalInputTokens": 6,
+            "totalOutputTokens": 40,
+            "totalCacheReadTokens": 41794,
+            "totalCacheCreationTokens": 7299
+          },
+          "turns": [
+            {
+              "totalInputTokens": 2,
+              "totalOutputTokens": 20,
+              "totalCacheReadTokens": 20897,
+              "totalCacheCreationTokens": 3616
+            },
+            {
+              "totalInputTokens": 4,
+              "totalOutputTokens": 20,
+              "totalCacheReadTokens": 20897,
+              "totalCacheCreationTokens": 3683
+            }
+          ]
+        },
+        {
+          "case": "key-1",
+          "requests": 1,
+          "totals": {
+            "totalInputTokens": 2,
+            "totalOutputTokens": 23,
+            "totalCacheReadTokens": 20897,
+            "totalCacheCreationTokens": 3619
+          },
+          "turns": [
+            {
+              "totalInputTokens": 2,
+              "totalOutputTokens": 23,
+              "totalCacheReadTokens": 20897,
+              "totalCacheCreationTokens": 3619
+            }
+          ]
+        }
+      ],
+      "originalActiveKeysPreserved": true,
+      "ownedKeysAndContainersCleanedUp": true
+    },
+    "scope": {
+      "perKey": [
+        "requests",
+        "token/cache totals",
+        "latency",
+        "cost estimates",
+        "routing"
+      ],
+      "global": [
+        "server diagnostics",
+        "live account health",
+        "retention"
+      ],
+      "historicalUnattributed": true,
+      "deletedHistoryRetained": true,
+      "reusedNamesSeparatedById": true,
+      "credentialsOrDigestsRecorded": false,
+      "upstreamRequestsAndSessionCacheCodeChanged": false
+    },
+    "retention": {
+      "existingProductionBackend": "memory",
+      "restartResetHistory": true,
+      "preRestartRowsExportedPrivately": 97,
+      "existingSettingUnchanged": true
+    },
+    "firstProbeCorrection": {
+      "runtimeFailures": false,
+      "initialAssertionExpectedFullModelInSdkAliasField": true,
+      "recordedModel": "opus[1m]",
+      "requestModel": "claude-opus-5-5",
+      "nativeCliInferenceAndResumeSucceeded": true,
+      "ownedKeysCleanedUpAndOriginalKeysPreserved": true,
+      "correctedAssertionRequiresExactRequestModelAndNativeCliModelUsage": true
+    },
+    "reproducibleProductionHarness": "Coolify integration repository: tasks/check-meridian-key-filter.py",
+    "mergeOrReleasePerformed": false
+  },
+  "currentTelemetryBackend": "sqlite",
+  "sqlitePersistenceUpdate": {
+    "runtimeSource": "056688735f87028850d906a5637bf299bcb6a7e2",
+    "configuration": {
+      "MERIDIAN_TELEMETRY_PERSIST": "1",
+      "MERIDIAN_TELEMETRY_RETENTION_DAYS": "7"
+    },
+    "usesExistingPersistentVolume": true,
+    "separateDatabaseService": false,
+    "initialCause": "History restarted with an in-memory store; 5 of 1000 slots were used, not overflow.",
+    "import": {
+      "result": "PASS",
+      "source": "056688735f87028850d906a5637bf299bcb6a7e2",
+      "existingBackend": "memory",
+      "priorPrivateRowsRestored": 97,
+      "currentRowsPreserved": 5,
+      "sqliteRows": 102,
+      "diagnosticRowsPreserved": 5,
+      "retentionDays": 7,
+      "persistentVolume": "gda090omyikrxn6cxubwojzx_claude-home",
+      "privateDirectoryMode": "0700",
+      "databaseMode": "0600",
+      "modelCalls": 0,
+      "originalMetricTimestampsRetained": true
+    },
+    "actualNativeCliWrite": {
+      "result": "PASS",
+      "checks": [
+        "expected-runtime-source",
+        "existing-active-credentials-preserved-before-probe",
+        "production-dashboard-has-api-key-selector",
+        "create-owned-key",
+        "create-owned-key",
+        "read-/telemetry/client-keys",
+        "unused-active-keys-in-selector",
+        "client-cannot-read-administrator-telemetry",
+        "native-cli-version",
+        "native-cli-inference-0",
+        "read-/telemetry/requests",
+        "key-0-attributed-records",
+        "key-0-real-claude-success",
+        "key-0-native-stream-passthrough",
+        "read-/telemetry/summary",
+        "key-0-summary-count",
+        "key-0-token-and-cache-totals",
+        "read-/telemetry/routes",
+        "key-0-routing-count",
+        "key-0-no-global-session-tree",
+        "no-client-thinking-workaround",
+        "read-/telemetry/requests",
+        "no-credential-or-digest-in-telemetry",
+        "read-/telemetry/requests",
+        "no-credential-or-digest-in-telemetry",
+        "read-/telemetry/summary",
+        "read-/telemetry/requests",
+        "unknown-key-does-not-return-all-usage",
+        "read-/telemetry/requests",
+        "unattributed-filter-contains-only-missing-identities",
+        "delete-owned-key",
+        "create-owned-key",
+        "same-name-replacement-keeps-distinct-id",
+        "read-/telemetry/client-keys",
+        "deleted-history-and-unused-replacement-separate",
+        "read-/telemetry/requests",
+        "replacement-does-not-inherit-old-usage",
+        "read-/telemetry/requests",
+        "deleted-key-usage-remains-readable",
+        "deleted-key-remains-rejected",
+        "owned-verification-key-cleaned-up",
+        "owned-verification-key-cleaned-up",
+        "original-active-key-registry-unchanged"
+      ],
+      "source": "056688735f87028850d906a5637bf299bcb6a7e2",
+      "image": "sha256:5d39278ee353cb215daeffc896b3a2065b7b6c175a400eb65fc55cdc8bceb04a",
+      "cliVersion": "2.1.287",
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "actualCli": true,
+      "warmResumeValidated": false,
+      "singleStorageWriteCheck": true,
+      "usage": [
+        {
+          "case": "key-0",
+          "requests": 1,
+          "totals": {
+            "totalInputTokens": 2,
+            "totalOutputTokens": 19,
+            "totalCacheReadTokens": 20897,
+            "totalCacheCreationTokens": 3615
+          },
+          "turns": [
+            {
+              "totalInputTokens": 2,
+              "totalOutputTokens": 19,
+              "totalCacheReadTokens": 20897,
+              "totalCacheCreationTokens": 3615
+            }
+          ]
+        }
+      ],
+      "originalActiveKeysPreserved": true,
+      "ownedKeysAndContainersCleanedUp": true
+    },
+    "restartVerification": {
+      "result": "PASS",
+      "checks": [
+        "coolify-persistence-environment-applied",
+        "container-healthy",
+        "administrator-api-readable",
+        "sqlite-active-without-memory-fallback",
+        "database-on-persistent-volume",
+        "administrator-api-readable",
+        "complete-verification-window",
+        "imported-timestamps-identities-and-usage-preserved",
+        "no-three-minute-or-thousand-row-memory-cap",
+        "administrator-api-readable",
+        "sqlite-key-filter-matches-retained-rows",
+        "administrator-api-readable",
+        "sqlite-filtered-count",
+        "sqlite-filtered-token-totals",
+        "administrator-api-readable",
+        "sqlite-key-filter-matches-retained-rows",
+        "administrator-api-readable",
+        "sqlite-filtered-count",
+        "sqlite-filtered-token-totals",
+        "administrator-api-readable",
+        "sqlite-key-filter-matches-retained-rows",
+        "administrator-api-readable",
+        "sqlite-filtered-count",
+        "sqlite-filtered-token-totals",
+        "administrator-api-readable",
+        "sqlite-key-filter-matches-retained-rows",
+        "administrator-api-readable",
+        "sqlite-filtered-count",
+        "sqlite-filtered-token-totals",
+        "administrator-api-readable",
+        "sqlite-key-filter-matches-retained-rows",
+        "administrator-api-readable",
+        "sqlite-filtered-count",
+        "sqlite-filtered-token-totals",
+        "administrator-api-readable",
+        "old-diagnostic-timestamps-preserved",
+        "original-key-registry-preserved",
+        "actual-container-restart-observed",
+        "all-snapshot-usage-survived-restart",
+        "snapshot-diagnostics-survived-restart"
+      ],
+      "mode": "--verify",
+      "source": "056688735f87028850d906a5637bf299bcb6a7e2",
+      "backend": {
+        "kind": "sqlite",
+        "held": 103,
+        "retentionDays": 7,
+        "dbPath": "/home/claude/.config/meridian/telemetry.db",
+        "dbBytes": 114960,
+        "oldestTimestamp": 1791305385193,
+        "asOf": 1791309326451
+      },
+      "importedMetricRows": 102,
+      "currentMetricRows": 103,
+      "diagnosticRows": 6,
+      "apiReadMilliseconds": [
+        104.79,
+        107.59,
+        103.99,
+        101.77,
+        101.32,
+        102.03,
+        101.39,
+        112.74,
+        107.56,
+        103.76,
+        107.77,
+        102.77,
+        108.87
+      ],
+      "startedAt": "2026-10-06T17:54:32.223495505Z",
+      "actualRestartPersistenceVerified": true,
+      "modelCalls": 0,
+      "originalActiveKeysPreserved": true
+    },
+    "employeeSettingsChanged": false,
+    "promptCaptureEnabled": false,
+    "finalStatus": {
+      "result": "PASS",
+      "healthy": true,
+      "startedAt": "2026-10-06T17:56:06.417199973Z",
+      "source": "056688735f87028850d906a5637bf299bcb6a7e2",
+      "retention": {
+        "kind": "sqlite",
+        "held": 103,
+        "retentionDays": 7,
+        "dbPath": "/home/claude/.config/meridian/telemetry.db",
+        "dbBytes": 114960,
+        "oldestTimestamp": 1791305385193,
+        "asOf": 1791309609002
+      },
+      "httpStatus": 200,
+      "originalActiveKeysPreserved": true,
+      "extraRestartQueued": true,
+      "coolifyServiceStatus": "running:healthy",
+      "agentgatewayServiceStatus": "exited"
+    }
+  }
+}

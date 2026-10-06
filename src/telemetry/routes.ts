@@ -12,7 +12,7 @@ import { telemetryStore, diagnosticLog } from "./index"
 import { dashboardHtml } from "./dashboard"
 import { iconResponse } from "./icon"
 import { withSavedLayout } from "./pageLayout"
-import type { SessionTreeSummary } from "./types"
+import type { SessionTreeSummary, TelemetryClientKey } from "./types"
 import { collapseRouteChains, summarizeRoutes } from "./routeChain"
 
 /** Upper bound on the rows one /routes tally reads, matching the memory
@@ -20,6 +20,8 @@ import { collapseRouteChains, summarizeRoutes } from "./routeChain"
 const ROUTE_SUMMARY_MAX_ROWS = 1000
 
 export interface TelemetryRouteDeps {
+  /** Current native key metadata; historical identities come from the store. */
+  getClientKeys?: () => TelemetryClientKey[]
   /**
    * Live session-tree cancellation counters, injected by the proxy so this
    * module keeps depending only on the telemetry store. Optional: embedders and
@@ -39,16 +41,30 @@ export function createTelemetryRoutes(deps: TelemetryRouteDeps = {}) {
   // Favicon
   routes.get("/icon.svg", (c) => iconResponse() ?? c.notFound())
 
+  // Both active (including unused) and historical key IDs. Never merge by name:
+  // deletion permits a new key to reuse the label of an older identity.
+  routes.get("/client-keys", (c) => {
+    const active = deps.getClientKeys?.() ?? []
+    const keys = new Map(telemetryStore.getClientKeys().map(key => [key.id, {
+      ...key, active: key.id === "admin" ? true : deps.getClientKeys ? false : undefined,
+    }]))
+    for (const key of active) keys.set(key.id, { ...key, active: true })
+    c.header("Cache-Control", "no-store")
+    return c.json({ keys: [...keys.values()].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)) })
+  })
+
   // Recent requests
   routes.get("/requests", (c) => {
     const limit = Number.parseInt(c.req.query("limit") || "50", 10)
     const since = c.req.query("since") ? Number.parseInt(c.req.query("since")!, 10) : undefined
     const model = c.req.query("model") || undefined
+    const clientKeyId = c.req.query("clientKeyId") || undefined
 
     const requests = telemetryStore.getRecent({
       limit: Math.min(limit, 500),
       since,
       model,
+      clientKeyId,
     })
 
     // Priority failover writes one row per account attempted; fold them back
@@ -64,7 +80,7 @@ export function createTelemetryRoutes(deps: TelemetryRouteDeps = {}) {
   routes.get("/routes", (c) => {
     const raw = Number.parseInt(c.req.query("window") || "3600000", 10)
     const windowMs = Number.isFinite(raw) && raw > 0 ? raw : 3600000
-    const metrics = telemetryStore.getRecent({ limit: ROUTE_SUMMARY_MAX_ROWS, since: Date.now() - windowMs })
+    const metrics = telemetryStore.getRecent({ limit: ROUTE_SUMMARY_MAX_ROWS, since: Date.now() - windowMs, clientKeyId: c.req.query("clientKeyId") || undefined })
     return c.json({ windowMs, ...summarizeRoutes(collapseRouteChains(metrics)) })
   })
 
@@ -78,8 +94,9 @@ export function createTelemetryRoutes(deps: TelemetryRouteDeps = {}) {
   routes.get("/summary", (c) => {
     const windowMs = Number.parseInt(c.req.query("window") || "3600000", 10) // default 1 hour
 
-    const summary = telemetryStore.summarize(windowMs)
-    const sessionTree = deps.getSessionTree?.()
+    const clientKeyId = c.req.query("clientKeyId") || undefined
+    const summary = telemetryStore.summarize(windowMs, { clientKeyId })
+    const sessionTree = clientKeyId ? undefined : deps.getSessionTree?.()
     return c.json(sessionTree ? { ...summary, sessionTree } : summary)
   })
 

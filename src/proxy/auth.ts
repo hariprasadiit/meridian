@@ -3,13 +3,16 @@
  *
  * When MERIDIAN_API_KEY is set, requests to protected routes must include
  * a matching key via `x-api-key` header or `Authorization: Bearer` header.
- * When unset, all routes are open (default behavior, backward compatible).
+ * Client keys are limited to inference routes; management always uses the admin key.
+ * When neither admin nor client keys are configured, routes remain open for local use.
  *
  * Uses constant-time comparison to prevent timing attacks.
  */
 
 import { createHmac, timingSafeEqual } from "node:crypto"
 import type { Context, Next } from "hono"
+import type { RequestMetric, TelemetryClientKey } from "../telemetry/types"
+import { clientKeysConfigured, findClientKey } from "../clientKeys"
 
 function getConfiguredKey(): string | undefined {
   return process.env.MERIDIAN_API_KEY || undefined
@@ -20,7 +23,7 @@ function getConfiguredKey(): string | undefined {
  * True when MERIDIAN_API_KEY is set to a non-empty value.
  */
 export function authEnabled(): boolean {
-  return Boolean(getConfiguredKey())
+  return Boolean(getConfiguredKey()) || clientKeysConfigured()
 }
 
 /**
@@ -36,7 +39,7 @@ function safeCompare(a: string, b: string): boolean {
 /** Shared by the Hono default backend and standard-Request runtime backends. */
 export function hasValidApiKey(headers: Headers): boolean {
   const key = getConfiguredKey()
-  if (!key) return true
+  if (!key) return !clientKeysConfigured()
   const authorization = headers.get("authorization")
   const provided = headers.get("x-api-key") || (authorization?.startsWith("Bearer ") ? authorization.slice(7) : undefined)
   return Boolean(provided && safeCompare(provided, key))
@@ -62,18 +65,34 @@ function extractKey(c: Context): string | undefined {
  */
 export async function requireAuth(c: Context, next: Next) {
   const key = getConfiguredKey()
-  if (!key) return next()
+  if (!key && !clientKeysConfigured()) return next()
 
   const provided = extractKey(c)
-  if (!provided || !safeCompare(provided, key)) {
-    return c.json({
+  if (key && provided && safeCompare(provided, key)) {
+    c.set("authenticatedClientKey", { id: "admin", name: "Administrator" })
+    return next()
+  }
+  const path = c.req.path
+  const inference = (c.req.method === "POST" && ["/v1/messages", "/messages", "/v1/messages/count_tokens"].includes(path))
+    || (["GET", "HEAD"].includes(c.req.method) && path === "/v1/models")
+  if (key && provided && inference && clientKeysConfigured()) {
+    try {
+      const identity = findClientKey(provided)
+      if (identity) { c.set("authenticatedClientKey", identity); return next() }
+    }
+    catch { return c.json({ type: "error", error: { type: "api_error", message: "Client key registry is unavailable" } }, 503) }
+  }
+  return c.json({
       type: "error",
       error: {
         type: "authentication_error",
         message: "Invalid or missing API key",
       },
-    }, 401)
-  }
+  }, 401)
+}
 
-  return next()
+/** Public identity from successful authentication only; never forwarded upstream. */
+export function clientKeyMetric(c: Context): Pick<RequestMetric, "clientKeyId" | "clientKeyName"> {
+  const key = c.get("authenticatedClientKey") as TelemetryClientKey | undefined
+  return key ? { clientKeyId: key.id, clientKeyName: key.name } : {}
 }

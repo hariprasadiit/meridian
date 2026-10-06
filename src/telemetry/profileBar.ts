@@ -265,6 +265,7 @@ export const profileBarHtml = `
     <a href="/providers" id="nav-providers">Providers</a>
     <a href="/telemetry" id="nav-telemetry">Telemetry</a>
     <a href="/profiles" id="nav-profiles">Profiles</a>
+    <a href="/keys" id="nav-keys">API Keys</a>
     <a href="/settings" id="nav-settings">Settings</a>
     <a href="/plugins" id="nav-plugins">Plugins</a>
   </nav>
@@ -528,7 +529,7 @@ export const profileBarJs = `
       renderHost(h.hostname);
       renderBuild(h.build);
       if (h.backend === 'antigravity') {
-        ['nav-telemetry','nav-profiles','nav-settings','nav-plugins'].forEach(function(id) { document.getElementById(id).hidden = true; });
+        ['nav-telemetry','nav-profiles','nav-keys','nav-settings','nav-plugins'].forEach(function(id) { document.getElementById(id).hidden = true; });
         profileChip.removeAttribute('href');
       }
     }).catch(function() {

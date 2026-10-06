@@ -46,7 +46,17 @@ export interface RouteHop {
   refusedBucket?: string
 }
 
+/** Non-secret key identity captured at authentication, retained with historical metrics. */
+export interface TelemetryClientKey { id: string; name: string }
+export interface TelemetryFilter {
+  /** Stable key ID, or "unattributed" for records without an authenticated identity. */
+  clientKeyId?: string
+}
+
 export interface RequestMetric {
+  clientKeyId?: string
+  clientKeyName?: string
+
   /** Unique request identifier */
   requestId: string
 
@@ -382,11 +392,14 @@ export interface ITelemetryStore {
     limit?: number
     since?: number
     model?: string
+    clientKeyId?: string
   }): RequestMetric[]
   /** Find the latest successful metric for a given SDK session. */
   getLastForSession(sdkSessionId: string): RequestMetric | undefined
   /** Compute aggregate statistics over a time window. */
-  summarize(windowMs?: number): TelemetrySummary
+  summarize(windowMs?: number, filter?: TelemetryFilter): TelemetrySummary
+  /** Distinct historical key identities, without credentials or hashes. */
+  getClientKeys(): TelemetryClientKey[]
   /** Clear all stored metrics. */
   clear(): void
 }

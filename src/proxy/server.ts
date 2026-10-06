@@ -97,8 +97,12 @@ import { translateResponsesToAnthropic, translateAnthropicToResponses, createRes
 import { flattenAssistantContent, normalizeStructuredUserContent, replayToolResultHeader, frameStructuredReplay, coalesceStructuredUserMessages, coalesceTrailingSystemReminders } from "./replay"
 import { unstreamedAssistantBlockFrames } from "./unstreamedAssistant"
 import { extractAdvisorModel, extractSystemText, getLastUserMessage, stripAdvisorTools, stripNonStandardStreamFields, MULTIMODAL_TYPES, buildToolUseIndex, frameReplayTurns } from "./messages"
-import { requireAuth, authEnabled } from "./auth"
+import { requireAuth, authEnabled, clientKeyMetric } from "./auth"
+import { clientKeyResponse } from "../clientKeyRoutes"
+import { clientKeysConfigured, listClientKeys } from "../clientKeys"
+import { keysPageHtml } from "../telemetry/keysPage"
 import { detectAdapter } from "./adapters/detect"
+import { rootSessionIdOf } from "./adapter"
 import { buildQueryOptions, isCliThinkingDisplay, resolveQueryConfigDir, singleTurnCapLiftRaisesBudget, type QueryContext } from "./query"
 import { normalizeEffort } from "./effort"
 import { parseOutputFormat, structuredOutputText } from "./structuredOutput"
@@ -328,6 +332,12 @@ interface RequestMeta {
    * where in the chain a hop sits, and that it is one at all.
    */
   routeAttempt?: number
+  /**
+   * The adapter declared this a side call sharing the conversation's session
+   * key (`AgentIdentity.isAuxiliaryRequest`). Decided once, before the turn
+   * lease, so skipping the lease and skipping session lookup cannot disagree.
+   */
+  auxiliaryRequest?: boolean
 }
 
 interface PriorityAttemptExposure {
@@ -1067,6 +1077,8 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
   app.use("/plugins", requireAuth)
   app.use("/settings/*", requireAuth)
   app.use("/settings", requireAuth)
+  app.use("/keys", requireAuth)
+  app.use("/keys/*", requireAuth)
   app.use("/design-login", requireAuth)
   app.use("/providers", requireAuth)
   app.use("/providers/*", requireAuth)
@@ -1458,7 +1470,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
       })
       const sniffed = await sniffAccountFailure(inner)
       if (!sniffed.failed) {
-        if (options.sessionKey && !options.durableRoute) {
+        if (options.sessionKey && !options.durableRoute && !options.requestMeta.auxiliaryRequest) {
           // Process memory preserves only legacy/keyless new-conversation
           // affinity. Trusted attempts publish authority at the atomic durable
           // terminal barrier and must not poison adoption on errors or cancel.
@@ -1591,6 +1603,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
     return withClaudeLogContext({ requestId: requestMeta.requestId, endpoint: requestMeta.endpoint }, async () => {
       // Hoist adapter detection before try so it's available in the catch block for telemetry
       const adapter = detectAdapter(c)
+      const sessionNamespace = adapter.getSessionNamespace?.(c, options.body)
       const assertDurableWritesAllowed = (): void => {
         if (durableWritesRevoked) throw new Error("Proxy shutdown revoked this request's durable writes")
         if (requestAbort.controller.signal.aborted) {
@@ -1653,7 +1666,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
             // not be deleted merely to authorize a noncanonical terminal.
             return false
           }
-          const evicted = evictCachedSession(...args)
+          const evicted = evictCachedSession(args[0], args[1], args[2], args[3], sessionNamespace)
           if (!evicted && resumedMappingMayBeAdvanced) {
             requestMeta.retainSessionTurnFence?.()
           }
@@ -1903,9 +1916,10 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
         // Resolve profile: header > sticky (routing="sticky" only) > active >
         // default > first configured. Sticky routing (#383) assigns each
         // client session to a profile via rendezvous hashing so multi-account
-        // setups keep per-account prompt caches warm; the same session key
-        // Meridian already uses for session tracking is the assignment key,
-        // so a session and its subagent/fork requests land on one account.
+        // setups keep per-account prompt caches warm; the conversation's root
+        // session key is the assignment key, so a session and its
+        // subagent/fork requests land on one account even when a subagent
+        // carries a session key of its own.
         const routingMode = getRoutingMode(process.env.MERIDIAN_ROUTING ?? getSetting("routing"))
         attributedRoutingMode = routingMode
         // Priority mode (opt-in): unpinned requests are dispatched across the
@@ -1916,15 +1930,20 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
             if (unknown.length > 0) claudeLog("priority.unknown_order_ids", { unknown })
             const assignmentCwd = adapter.extractClientWorkingDirectory?.(body)
               ?? adapter.extractWorkingDirectory(body)
+            // The durable route below stays on the request's own key: it is
+            // atomically coupled to that key's session mapping. Only the
+            // process-local assignment follows the conversation's root, so a
+            // subagent keyed apart from its parent stays on the parent's
+            // account (AgentIdentity.getRootSessionId).
             const adapterSessionId = adapter.getSessionId(c, body)
             const sessionKey = getPriorityAssignmentKey(
-              adapterSessionId,
+              rootSessionIdOf(adapter, c, body),
               lineageMessages,
               assignmentCwd,
             )
             const preferred = order[0]
             if (preferred !== undefined) {
-              const trustedTurn = requestMeta.routingTurnIdentity
+              const trustedTurn = requestMeta.auxiliaryRequest ? undefined : requestMeta.routingTurnIdentity
               let promotionTurn = trustedTurn
               let publicationTurn: PriorityDispatchOptions["publicationTurn"]
               const failbackPolicy = getPriorityFailbackPolicy(
@@ -1945,62 +1964,68 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                   }, 503, TRANSIENT_RETRY_AFTER_HEADERS)
                 }
                 if (routeResult.status === "found") {
-                  durableRoute = { routeKey, expectedGeneration: routeResult.generation }
                   assignment = {
                     profileId: routeResult.assignment.profileId,
                     requestId: routeResult.assignment.lastHumanTurnDigest,
                   }
-                  // Existing signed metadata is retention-only authority. It
-                  // may refresh this exact route atomically, but promotionTurn
-                  // below remains the sole permission to move profiles.
-                  publicationTurn = {
-                    turnId: routeResult.assignment.lastHumanTurnDigest,
-                    issuedAt: routeResult.assignment.lastHumanTurnIssuedAt,
-                  }
-                  if (trustedTurn) {
-                    const sameHumanTurn = trustedTurn.turnId === routeResult.assignment.lastHumanTurnDigest
-                    const strictlyNewer = trustedTurn.issuedAt > routeResult.assignment.lastHumanTurnIssuedAt
-                    if (sameHumanTurn) {
-                      publicationTurn = {
-                        turnId: trustedTurn.turnId,
-                        issuedAt: Math.max(trustedTurn.issuedAt, routeResult.assignment.lastHumanTurnIssuedAt),
-                      }
-                    } else if (strictlyNewer) {
-                      publicationTurn = trustedTurn
-                    } else {
-                      // A valid but older/equal changed token is a replay or an
-                      // ambiguous same-second turn. Retain and republish the
-                      // current route, but never let it trigger failback.
-                      promotionTurn = undefined
-                      claudeLog("priority.attestation_replay_withheld", {
-                        routeKey,
-                        issuedAt: trustedTurn.issuedAt,
-                        highWater: routeResult.assignment.lastHumanTurnIssuedAt,
-                      })
+                  // Auxiliary work may inherit placement, never conversation
+                  // publication or attempt ownership. It can fail over on its
+                  // own without moving the main turn's retained route.
+                  if (!requestMeta.auxiliaryRequest) {
+                    durableRoute = { routeKey, expectedGeneration: routeResult.generation }
+                    // Existing signed metadata is retention-only authority. It
+                    // may refresh this exact route atomically, but promotionTurn
+                    // below remains the sole permission to move profiles.
+                    publicationTurn = {
+                      turnId: routeResult.assignment.lastHumanTurnDigest,
+                      issuedAt: routeResult.assignment.lastHumanTurnIssuedAt,
                     }
-                  }
-                  const mapped = lookupSharedSessionResult(routeResult.assignment.mappingKey)
-                  if (mapped.status === "error") {
-                    return c.json({
-                      type: "error",
-                      error: { type: "overloaded_error", message: "Durable priority session state is unavailable" },
-                    }, 503, TRANSIENT_RETRY_AFTER_HEADERS)
-                  }
-                  routeMappingIsCurrent = mapped.status === "found"
-                    && mapped.generation === routeResult.assignment.mappingGeneration
-                  if (!routeMappingIsCurrent) {
-                    // Never resume an unproved mapping generation. Only a fresh,
-                    // trusted human-turn proof may atomically repair authority;
-                    // unsigned/internal work retains the route and fails closed.
-                    if (!promotionTurn) {
+                    if (trustedTurn) {
+                      const sameHumanTurn = trustedTurn.turnId === routeResult.assignment.lastHumanTurnDigest
+                      const strictlyNewer = trustedTurn.issuedAt > routeResult.assignment.lastHumanTurnIssuedAt
+                      if (sameHumanTurn) {
+                        publicationTurn = {
+                          turnId: trustedTurn.turnId,
+                          issuedAt: Math.max(trustedTurn.issuedAt, routeResult.assignment.lastHumanTurnIssuedAt),
+                        }
+                      } else if (strictlyNewer) {
+                        publicationTurn = trustedTurn
+                      } else {
+                        // A valid but older/equal changed token is a replay or an
+                        // ambiguous same-second turn. Retain and republish the
+                        // current route, but never let it trigger failback.
+                        promotionTurn = undefined
+                        claudeLog("priority.attestation_replay_withheld", {
+                          routeKey,
+                          issuedAt: trustedTurn.issuedAt,
+                          highWater: routeResult.assignment.lastHumanTurnIssuedAt,
+                        })
+                      }
+                    }
+                    const mapped = lookupSharedSessionResult(routeResult.assignment.mappingKey)
+                    if (mapped.status === "error") {
                       return c.json({
                         type: "error",
                         error: { type: "overloaded_error", message: "Durable priority session state is unavailable" },
                       }, 503, TRANSIENT_RETRY_AFTER_HEADERS)
                     }
-                    durableRoute = { ...durableRoute, forceFreshReplay: true }
+                    routeMappingIsCurrent = mapped.status === "found"
+                      && mapped.generation === routeResult.assignment.mappingGeneration
+                      && mapped.session.keyNamespace === sessionNamespace
+                    if (!routeMappingIsCurrent) {
+                      // Never resume an unproved mapping generation. Only a fresh,
+                      // trusted human-turn proof may atomically repair authority;
+                      // unsigned/internal work retains the route and fails closed.
+                      if (!promotionTurn) {
+                        return c.json({
+                          type: "error",
+                          error: { type: "overloaded_error", message: "Durable priority session state is unavailable" },
+                        }, 503, TRANSIENT_RETRY_AFTER_HEADERS)
+                      }
+                      durableRoute = { ...durableRoute, forceFreshReplay: true }
+                    }
                   }
-                } else if (routeResult.attempt && !trustedTurn) {
+                } else if (routeResult.attempt && !trustedTurn && !requestMeta.auxiliaryRequest) {
                   // An absent route can still carry a durable uncertain-attempt
                   // blocker. Missing/invalid identity cannot bypass it.
                   return c.json({
@@ -2095,7 +2120,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
           finalConfig.defaultProfile,
           options.forcedProfileId || c.req.header("x-meridian-profile") || undefined,
           routingMode === "sticky"
-            ? { routingMode, stickySessionKey: adapter.getSessionId(c, body) }
+            ? { routingMode, stickySessionKey: rootSessionIdOf(adapter, c, body) }
             : undefined
         )
         // Also identifies failure telemetry; priority retries resolve each account here.
@@ -2556,8 +2581,9 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
         // adapter selection untouched.
         const ownsToolLoopWithResume = adapterBase === "claude-code" || isClaudeCodeClient(c)
         const isClientDrivenLoop = !ownsToolLoopWithResume && !agentSessionId && lastIsToolResult
-        const durableMappingKey = profileSessionId
-          || getConversationFingerprint(lineageMessages, profileScopedCwd)
+        const durableMappingKey = requestMeta.auxiliaryRequest
+          ? undefined
+          : profileSessionId || getConversationFingerprint(lineageMessages, profileScopedCwd)
         // NOTE: A headerless Pi tool round must stay independent of the fingerprint's
         // SDK checkpoint: concurrent loops can share its first user message.
         // The refused tool-use ID keys only a one-shot tool-schema grant, so
@@ -2580,6 +2606,10 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
         // and otherwise text-free bodies) has no stable cache identity either,
         // and runs fresh rather than manufacturing a generation for an empty key.
         //
+        // An adapter-declared auxiliary request is the one keyed request that
+        // is independent anyway: it carries the conversation's key without
+        // being a turn of it (see AgentIdentity.isAuxiliaryRequest).
+        //
         // One decision, one reported cause: deriving the flag from the cause is
         // what keeps the log honest. #820 was a log full of `lineage=new` whose
         // only explanation lived in this file, and a label computed separately
@@ -2590,13 +2620,20 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
           isSubagent: isSubagentRequest,
           clientDrivenLoop: isClientDrivenLoop,
           hasDurableKey: Boolean(durableMappingKey),
+          isAuxiliary: requestMeta.auxiliaryRequest === true,
         })
         const isIndependentSession = independentCause !== undefined
         // Once per process: the operator cannot see this in success metrics.
         if (independentCause === "headerless-tool-result") warnHeaderlessToolLoopOnce(adapter.name)
-        const durableMappingAtTurn = durableMappingKey
+        const rawDurableMappingAtTurn = durableMappingKey
           ? lookupSharedSessionResult(durableMappingKey)
           : { status: "missing" as const }
+        // Preserve the slot generation for a fresh CAS, never the unproven
+        // SDK/checkpoint/recovery authority of an old raw reserved-prefix ID.
+        const durableMappingAtTurn = rawDurableMappingAtTurn.status === "found"
+          && rawDurableMappingAtTurn.session.keyNamespace !== sessionNamespace
+          ? { status: "missing" as const, generation: rawDurableMappingAtTurn.generation }
+          : rawDurableMappingAtTurn
         if (durableMappingAtTurn.status === "error") {
           throw new Error(`Shared session store is unavailable: ${durableMappingAtTurn.error.message}`)
         }
@@ -2626,7 +2663,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
           : durableMappingAtTurn.status === "found"
         let lineageResult: LineageResult = isIndependentSession
           ? { type: "diverged", reason: "independent-request" }
-          : lookupSession(profileSessionId, lineageMessages, profileScopedCwd)
+          : lookupSession(profileSessionId, lineageMessages, profileScopedCwd, sessionNamespace)
         // NOTE: agent-specific (opencode) — when OpenCode's chat.headers plugin
         // hook doesn't fire (category-dispatched or title-generation requests),
         // the request has no session header and falls through to fingerprint
@@ -2696,7 +2733,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
         const trailingSystemReminderOptions = adapterBase === "claude-code" || adapterBase === "pi"
           ? { allowTrailingSystemReminder: true }
           : undefined
-        const durableCheckpointContinuation = durableCheckpointIds?.length
+        const durableCheckpointContinuation = !isIndependentSession && durableCheckpointIds?.length
           && durableMappingAtTurn.status === "found"
           && matchesStoredLineagePrefix(durableMappingAtTurn.session, lineageMessages)
           ? coalesceCompleteToolResultContinuation(
@@ -2744,6 +2781,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
         const lostRaceWhileWaiting = Boolean(
           agentSessionId &&
           profileSessionId &&
+          !isIndependentSession &&
           !advancesDurableCheckpoint &&
           (requestMeta.sessionTurnLease?.advancedWhileWaiting(profileSessionId) || advancedAcrossProcesses) &&
           lineageResult.type !== "continuation" &&
@@ -2769,6 +2807,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
           const conflictTotalMs = Date.now() - requestStartAt
           const conflictQueueWaitMs = totalQueueWaitMs(requestMeta)
           telemetryStore.record({
+            ...clientKeyMetric(c),
             requestId: requestMeta.requestId,
             timestamp: Date.now(),
             adapter: adapter.name,
@@ -2890,7 +2929,11 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
         const cachedSession = lineageResult.type !== "diverged" ? lineageResult.session : undefined
         let resumeSessionId = cachedSession?.claudeSessionId
         // Stable client/checkpoint identity survives a failed managed fork.
-        const idleStallSessionKey = profileSessionId || resumeSessionId || ""
+        // A side call must neither clear the main turn's retry ceiling nor
+        // inherit it. Its failure accounting lasts only for this request.
+        const idleStallSessionKey = requestMeta.auxiliaryRequest
+          ? ""
+          : profileSessionId || resumeSessionId || ""
         const idlePreflight = idleStalls.preflight(idleStallSessionKey, idleRequestKey, UPSTREAM_IDLE_MS, performance.now())
         if (idlePreflight) throw new IdleStallCeilingError(idlePreflight)
         const resumeFrom = lineageResult.type === "continuation" || lineageResult.type === "compaction"
@@ -3249,7 +3292,9 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
         }
       }
       const recoveryToolKey = profileSessionId ?? (firstResultId ? anonymousRecoveryKey(firstResultId) : undefined)
-      if (passthrough && recoveryToolKey) {
+      // A side call under the conversation's key must not spend the
+      // conversation's one-shot recovery grant.
+      if (passthrough && recoveryToolKey && independentCause !== "auxiliary-request") {
         const cached = sessionToolCache.get(recoveryToolKey)
         const recovered = cached?.recovery
         if (cached && recovered) {
@@ -4029,16 +4074,18 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                       rollbackUuid: undoRollbackUuid,
                       resumeSessionId,
                     })
-                    plog(`[PROXY] ${requestMeta.requestId} session unusable (${refusal}), evicting and replaying as fresh session`)
+                    plog(`[PROXY] ${requestMeta.requestId} session unusable (${refusal}), replaying as fresh session`)
                     managedForkSuperseded = true
                     await abandonManagedFork("resume_replay")
-                    if (!evictSession(
-                      profileSessionId,
-                      profileScopedCwd,
-                      lineageMessages,
-                      mappingExpectedGeneration,
-                    )) throw new Error("Session mapping changed before resume fallback eviction")
-                    mappingExpectedGeneration = refreshGenerationAfterEviction()
+                    if (!isIndependentSession) {
+                      if (!evictSession(
+                        profileSessionId,
+                        profileScopedCwd,
+                        lineageMessages,
+                        mappingExpectedGeneration,
+                      )) throw new Error("Session mapping changed before resume fallback eviction")
+                      mappingExpectedGeneration = refreshGenerationAfterEviction()
+                    }
                     await replaceWithFreshTarget("non_stream_resume_replay")
                     currentSessionId = managedForkTarget?.sessionId
                     sdkUuidMap.length = 0
@@ -4093,13 +4140,15 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                     plog(`[PROXY] ${requestMeta.requestId} extra usage persisted on resumed ${model}, retrying as fresh session`)
                     managedForkSuperseded = true
                     await abandonManagedFork("fresh_model_fallback")
-                    if (!evictSession(
-                      profileSessionId,
-                      profileScopedCwd,
-                      lineageMessages,
-                      mappingExpectedGeneration,
-                    )) throw new Error("Session mapping changed before model fallback eviction")
-                    mappingExpectedGeneration = refreshGenerationAfterEviction()
+                    if (!isIndependentSession) {
+                      if (!evictSession(
+                        profileSessionId,
+                        profileScopedCwd,
+                        lineageMessages,
+                        mappingExpectedGeneration,
+                      )) throw new Error("Session mapping changed before model fallback eviction")
+                      mappingExpectedGeneration = refreshGenerationAfterEviction()
+                    }
                     await replaceWithFreshTarget("non_stream_model_fallback")
                     currentSessionId = managedForkTarget?.sessionId
                     sdkUuidMap.length = 0
@@ -4684,6 +4733,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
             passthrough
           )
           telemetryStore.record({
+            ...clientKeyMetric(c),
             requestId: requestMeta.requestId,
             timestamp: Date.now(),
             adapter: adapter.name,
@@ -4789,6 +4839,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                     managedForkTarget?.sessionId === currentSessionId ? managedForkSource : undefined,
                     mappingExpectedGeneration,
                     options.priorityPublication,
+                    sessionNamespace,
                       )
                         if (stored) {
                           mappingExpectedGeneration = stored
@@ -5198,16 +5249,18 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                         rollbackUuid: undoRollbackUuid,
                         resumeSessionId,
                       })
-                      plog(`[PROXY] ${requestMeta.requestId} session unusable (${refusal}), evicting and replaying as fresh session`)
+                      plog(`[PROXY] ${requestMeta.requestId} session unusable (${refusal}), replaying as fresh session`)
                       managedForkSuperseded = true
                       await abandonManagedFork("resume_replay")
-                      if (!evictSession(
-                        profileSessionId,
-                        profileScopedCwd,
-                        lineageMessages,
-                        mappingExpectedGeneration,
-                      )) throw new Error("Session mapping changed before resume fallback eviction")
-                      mappingExpectedGeneration = refreshGenerationAfterEviction()
+                      if (!isIndependentSession) {
+                        if (!evictSession(
+                          profileSessionId,
+                          profileScopedCwd,
+                          lineageMessages,
+                          mappingExpectedGeneration,
+                        )) throw new Error("Session mapping changed before resume fallback eviction")
+                        mappingExpectedGeneration = refreshGenerationAfterEviction()
+                      }
                       await replaceWithFreshTarget("stream_resume_replay")
                       currentSessionId = managedForkTarget?.sessionId
                       sdkUuidMap.length = 0
@@ -5258,13 +5311,15 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                       plog(`[PROXY] ${requestMeta.requestId} extra usage persisted on resumed ${model}, retrying as fresh session`)
                       managedForkSuperseded = true
                       await abandonManagedFork("fresh_model_fallback")
-                      if (!evictSession(
-                        profileSessionId,
-                        profileScopedCwd,
-                        lineageMessages,
-                        mappingExpectedGeneration,
-                      )) throw new Error("Session mapping changed before model fallback eviction")
-                      mappingExpectedGeneration = refreshGenerationAfterEviction()
+                      if (!isIndependentSession) {
+                        if (!evictSession(
+                          profileSessionId,
+                          profileScopedCwd,
+                          lineageMessages,
+                          mappingExpectedGeneration,
+                        )) throw new Error("Session mapping changed before model fallback eviction")
+                        mappingExpectedGeneration = refreshGenerationAfterEviction()
+                      }
                       await replaceWithFreshTarget("stream_model_fallback")
                       currentSessionId = managedForkTarget?.sessionId
                       sdkUuidMap.length = 0
@@ -6009,6 +6064,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                     managedForkTarget?.sessionId === currentSessionId ? managedForkSource : undefined,
                     mappingExpectedGeneration,
                     options.priorityPublication,
+                    sessionNamespace,
                       )
                       if (stored) {
                         mappingExpectedGeneration = stored
@@ -6337,6 +6393,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                     recoveryForkSource,
                     mappingExpectedGeneration,
                     options.priorityPublication,
+                    sessionNamespace,
                       )
                       if (stored) {
                         mappingExpectedGeneration = stored
@@ -6653,6 +6710,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                   passthrough
                 )
                 telemetryStore.record({
+                  ...clientKeyMetric(c),
                   requestId: requestMeta.requestId,
                   timestamp: Date.now(),
                   adapter: adapter.name,
@@ -7080,6 +7138,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                     managedForkTarget?.sessionId === currentSessionId ? managedForkSource : undefined,
                     mappingExpectedGeneration,
                     options.priorityPublication,
+                    sessionNamespace,
                       )
                       if (stored) {
                         mappingExpectedGeneration = stored
@@ -7169,6 +7228,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                 const recoverTotalMs = Date.now() - requestStartAt
                 const recoverQueueWaitMs = totalQueueWaitMs(requestMeta)
                 telemetryStore.record({
+                  ...clientKeyMetric(c),
                   requestId: requestMeta.requestId,
                   timestamp: Date.now(),
                   adapter: adapter.name,
@@ -7320,6 +7380,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                 const cappedTotalMs = Date.now() - requestStartAt
                 const cappedQueueWaitMs = totalQueueWaitMs(requestMeta)
                 telemetryStore.record({
+                  ...clientKeyMetric(c),
                   requestId: requestMeta.requestId,
                   timestamp: Date.now(),
                   adapter: adapter.name,
@@ -7390,6 +7451,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
               const streamErrTotalMs = Date.now() - requestStartAt
               const streamErrQueueWaitMs = totalQueueWaitMs(requestMeta)
               telemetryStore.record({
+                ...clientKeyMetric(c),
                 requestId: requestMeta.requestId,
                 timestamp: Date.now(),
                 adapter: adapter.name,
@@ -7600,6 +7662,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
         const errorQueueWaitMs = totalQueueWaitMs(requestMeta)
         const errorTotalMs = Date.now() - requestStartAt
         telemetryStore.record({
+          ...clientKeyMetric(c),
           requestId: requestMeta.requestId,
           timestamp: Date.now(),
           adapter: adapter.name,
@@ -7824,6 +7887,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
 
     let body: any
     let sharedSessionRevisionsAtArrival: Record<string, string | null> | undefined
+    let auxiliaryRequest = false
     let routingTurnIdentity: RequestMeta["routingTurnIdentity"]
     try {
       try {
@@ -7852,6 +7916,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
         const adapter = detectAdapter(c)
         routingTurnIdentity = adapter.getRoutingTurnIdentity?.(c, body)
         const agentSessionId = adapter.getSessionId(c, body)
+        auxiliaryRequest = agentSessionId !== undefined && adapter.isAuxiliaryRequest?.(c, body) === true
         if (agentSessionId) {
           // Registered BEFORE the turn lease is acquired: a child queued behind
           // its own session's running turn is exactly the request a parent abort
@@ -7859,8 +7924,16 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
           // controller's signal.
           sessionTreeRegistration = processSessionTree.register({
             requestId,
-            sessionKey: agentSessionId,
-            parentKey: adapter.getParentSessionId?.(c, body),
+            // The adapter's key still names the conversation everywhere else.
+            // In the live cancellation tree a side call is a private leaf:
+            // main cancellation reaches it, its own cancellation reaches no
+            // main/subagent descendants, and a declared ancestor reaches both.
+            sessionKey: auxiliaryRequest ? `auxiliary:${randomUUID()}` : agentSessionId,
+            parentKey: auxiliaryRequest ? agentSessionId : adapter.getParentSessionId?.(c, body),
+            additionalParentKey: auxiliaryRequest ? adapter.getParentSessionId?.(c, body) : undefined,
+            explicitCancelKey: auxiliaryRequest ? undefined : adapter.getSessionCancelKey?.(c, body),
+            explicitRootKey: adapter.getRootSessionCancelKey?.(c, body) ?? adapter.getRootSessionId?.(c, body),
+            explicitRootSessionKey: adapter.getRootSessionId?.(c, body),
             abort: (reason) => {
               // A parent cancellation reaches this request through the
               // session tree; classify it distinctly from the watchdog,
@@ -7869,7 +7942,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
               turnWatchdogAbort.abort(reason)
             },
           })
-          subtreeSessionKey = agentSessionId
+          subtreeSessionKey = auxiliaryRequest ? undefined : agentSessionId
           const clientSignal = c.req.raw.signal
           if (clientSignal.aborted) {
             cascadeSubtreeCancel("client_abort")
@@ -7878,6 +7951,13 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
             clientSignal.addEventListener("abort", onClientAbort, { once: true })
             detachSubtreeAbortWatch = () => clientSignal.removeEventListener("abort", onClientAbort)
           }
+        }
+        // A side call has no turn: it never reads or publishes the mapping, so
+        // there is nothing to serialize. Queueing it behind the conversation's
+        // running turn only delayed the permission check that turn is waiting
+        // on. It stays registered in the session tree above, so a client abort
+        // still reaches it like any keyed request.
+        if (agentSessionId && !auxiliaryRequest) {
           const arrivalProfileIds = new Set(
             getEffectiveProfiles(finalConfig.profiles).map((profile) => profile.id),
           )
@@ -7920,6 +8000,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
               // symptom this whole feature can cause.
               const cancelledWaitMs = Date.now() - queueEnteredAt
               telemetryStore.record({
+                ...clientKeyMetric(c),
                 requestId,
                 timestamp: Date.now(),
                 adapter: adapter.name,
@@ -7980,6 +8061,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
         sessionTurnLease,
         sharedSessionRevisionsAtArrival,
         routingTurnIdentity,
+        auxiliaryRequest,
         retainSessionTurnFence: () => { retainSessionTurnFence = true },
         cascadeSubtreeCancel,
         inflight: inflightEntry,
@@ -8044,10 +8126,16 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
 
   // Telemetry dashboard and API
   app.route("/telemetry", createTelemetryRoutes({
+    getClientKeys: () => clientKeysConfigured() ? listClientKeys().map(({ id, name }) => ({ id, name })) : [],
     getSessionTree: () => processSessionTree.stats(),
   }))
 
   // SDK Features settings page and API
+  app.get("/keys", (c) => { c.header("Cache-Control", "no-store"); return c.html(withSavedLayout(keysPageHtml)) })
+  app.get("/keys/api", (c) => clientKeyResponse(c.req.raw))
+  app.post("/keys/api", (c) => clientKeyResponse(c.req.raw))
+  app.delete("/keys/api/:id", (c) => clientKeyResponse(c.req.raw, c.req.param("id")))
+
   app.get("/settings", (c) => {
     const { settingsPageHtml } = require("../telemetry/settingsPage") as typeof import("../telemetry/settingsPage")
     return c.html(withSavedLayout(settingsPageHtml))
