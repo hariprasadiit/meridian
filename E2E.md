@@ -6253,7 +6253,7 @@ files and links are rejected without overwriting their targets. Sanitized
 ordinal aliases and counters. It saves no real agent/session/tool IDs, tool
 arguments, prompts, generated prose, credentials or private SDK transcripts.
 Escrow native baseline/fixed reports as durable PR/CI artifacts and link them
-from the review handoff. [Prepared synthetic correction evidence](docs/maintenance/evidence/1231-claude-subagent-20261004/harness-controls/REPORT.md)
+from the review handoff. [Prepared synthetic correction evidence](https://github.com/rynfar/meridian/tree/a25ea62b0871338a085d6cf9b94d67a9037a4688/docs/maintenance/evidence/1231-claude-subagent-20261004/harness-controls/REPORT.md)
 does not establish native acceptance.
 
 **Remaining native gates:** actual Linux x64/client 2.1.287/target SDK/implicated

@@ -163,6 +163,15 @@ async function cancellationDeadline<T>(operation: Promise<T>): Promise<T> {
   }
 }
 
+/** Wait for the asynchronous SDK finalizer, rather than a fixed tick count. */
+async function trackedRequestsSettle(expected: number): Promise<void> {
+  await cancellationDeadline((async () => {
+    while (processSessionTree.stats().tracked !== expected) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+  })())
+}
+
 interface ControlledRequest {
   readonly abort: AbortController
   readonly response: Promise<Response>
@@ -186,7 +195,7 @@ async function cleanControlledRequests(requests: readonly ControlledRequest[]): 
       await result.value.body.cancel("test cleanup")
     }
   }
-  await settle()
+  await trackedRequestsSettle(0)
   expect(processSessionTree.stats().tracked).toBe(0)
 }
 
@@ -611,7 +620,7 @@ describe("parent-to-child cancellation", () => {
         expect(calls).toHaveLength(3)
         if (cancellation === "socket") auxiliaryAbort.abort("classifier socket closed")
         else await (await cancellationDeadline(auxiliaryResponse)).body!.cancel("classifier reader closed")
-        await settle()
+        await trackedRequestsSettle(2)
 
         expect(calls[2]!.controller!.signal.aborted).toBe(true)
         expect(calls[0]!.controller!.signal.aborted).toBe(false)
