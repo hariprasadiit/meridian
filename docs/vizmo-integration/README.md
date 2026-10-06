@@ -36,6 +36,30 @@ unique regardless of capitalization. Earlier revoked records are purged on the
 next registry operation. The registry file remains present even when empty, so
 old environment credentials cannot be imported again.
 
+## Telemetry by API key
+
+The administrator's `/telemetry` page offers **All API keys**, an individual
+named key, and **Unattributed**. The selected key filters requests, token/cache
+totals, cost estimates, latency and routing statistics for the selected time
+window. The selection is retained in the page URL as `clientKeyId`.
+
+Identity comes from successful authentication, using the key's stable ID rather
+than its name. Telemetry records only ID and name, never the credential or digest.
+Deleting a key preserves its historical usage, marked `(deleted)` in this
+selector; a replacement with the same name has separate usage. Older records
+without an identity remain Unattributed. Administrator inference calls use the
+reserved ID `admin`. Server logs, live account health and retention information
+remain global, and live session-tree counters are omitted from filtered totals.
+
+The administrator-only `/telemetry/client-keys` endpoint lists active and retained
+historical identities. `/telemetry/requests`, `/telemetry/summary` and
+`/telemetry/routes` accept `clientKeyId=<id>`; `unattributed` selects records with
+no identity. Omitting the parameter preserves the existing aggregate behavior.
+SQLite adds nullable columns and an index, preserving old rows and existing
+retention; memory telemetry retains its existing restart/reset behavior.
+Authentication attribution does not change upstream requests or session/cache
+handling. It adds no prompt logging.
+
 ## Cache behavior
 
 Auto-mode classifier calls retain the root's account affinity but never acquire

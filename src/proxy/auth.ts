@@ -11,7 +11,8 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto"
 import type { Context, Next } from "hono"
-import { clientKeysConfigured, hasValidClientKey } from "../clientKeys"
+import type { RequestMetric, TelemetryClientKey } from "../telemetry/types"
+import { clientKeysConfigured, findClientKey } from "../clientKeys"
 
 function getConfiguredKey(): string | undefined {
   return process.env.MERIDIAN_API_KEY || undefined
@@ -67,12 +68,18 @@ export async function requireAuth(c: Context, next: Next) {
   if (!key && !clientKeysConfigured()) return next()
 
   const provided = extractKey(c)
-  if (key && provided && safeCompare(provided, key)) return next()
+  if (key && provided && safeCompare(provided, key)) {
+    c.set("authenticatedClientKey", { id: "admin", name: "Administrator" })
+    return next()
+  }
   const path = c.req.path
   const inference = (c.req.method === "POST" && ["/v1/messages", "/messages", "/v1/messages/count_tokens"].includes(path))
     || (["GET", "HEAD"].includes(c.req.method) && path === "/v1/models")
   if (key && provided && inference && clientKeysConfigured()) {
-    try { if (hasValidClientKey(provided)) return next() }
+    try {
+      const identity = findClientKey(provided)
+      if (identity) { c.set("authenticatedClientKey", identity); return next() }
+    }
     catch { return c.json({ type: "error", error: { type: "api_error", message: "Client key registry is unavailable" } }, 503) }
   }
   return c.json({
@@ -82,4 +89,10 @@ export async function requireAuth(c: Context, next: Next) {
         message: "Invalid or missing API key",
       },
   }, 401)
+}
+
+/** Public identity from successful authentication only; never forwarded upstream. */
+export function clientKeyMetric(c: Context): Pick<RequestMetric, "clientKeyId" | "clientKeyName"> {
+  const key = c.get("authenticatedClientKey") as TelemetryClientKey | undefined
+  return key ? { clientKeyId: key.id, clientKeyName: key.name } : {}
 }

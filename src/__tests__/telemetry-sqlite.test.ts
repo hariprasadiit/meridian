@@ -228,13 +228,16 @@ describe("SqliteTelemetryStore", () => {
   it("persists data across close/reopen", () => {
     const dbPath = join(tmpDir, "persist-test.db")
     const stores1 = createSqliteStores(dbPath, 7)
-    stores1.telemetry.record(makeMetric({ requestId: "survive" }))
+    stores1.telemetry.record(makeMetric({ requestId: "survive", clientKeyId: "durable-key", clientKeyName: "Durable laptop" }))
     stores1.close()
 
     const stores2 = createSqliteStores(dbPath, 7)
     const recent = stores2.telemetry.getRecent()
     expect(recent.length).toBe(1)
     expect(recent[0]!.requestId).toBe("survive")
+    expect(recent[0]!.clientKeyId).toBe("durable-key")
+    expect(recent[0]!.clientKeyName).toBe("Durable laptop")
+    expect(stores2.telemetry.getRecent({ clientKeyId: "durable-key" })).toHaveLength(1)
     stores2.close()
   })
 })
@@ -451,6 +454,8 @@ describe("SqliteTelemetryStore — memory-store parity for newer fields", () => 
     const migrated = createSqliteStores(dbPath, 7)
     migrated.telemetry.record(makeMetric({
       requestId: "req-new",
+      clientKeyId: "migration-key",
+      clientKeyName: "Migration laptop",
       profileId: "work",
       sessionQueueWaitMs: 42,
       sdkQueueWaitMs: 7,
@@ -462,6 +467,9 @@ describe("SqliteTelemetryStore — memory-store parity for newer fields", () => 
 
     const rows = migrated.telemetry.getRecent({ limit: 10 })
     const fresh = rows.find(r => r.requestId === "req-new")!
+    expect(fresh.clientKeyId).toBe("migration-key")
+    expect(fresh.clientKeyName).toBe("Migration laptop")
+    expect(migrated.telemetry.getRecent({ clientKeyId: "unattributed" }).map(m => m.requestId)).toEqual(["req-old"])
     expect(fresh.profileId).toBe("work")
     expect(fresh.sessionQueueWaitMs).toBe(42)
     expect(fresh.sdkQueueWaitMs).toBe(7)
@@ -474,6 +482,8 @@ describe("SqliteTelemetryStore — memory-store parity for newer fields", () => 
     // columns rather than throwing or coming back null.
     const old = rows.find(r => r.requestId === "req-old")!
     expect(old).toBeDefined()
+    expect(old.clientKeyId).toBeUndefined()
+    expect(old.clientKeyName).toBeUndefined()
     expect(old.profileId).toBeUndefined()
     expect(old.sessionQueueWaitMs ?? 0).toBe(0)
     expect(old.sdkQueueWaitMs ?? 0).toBe(0)

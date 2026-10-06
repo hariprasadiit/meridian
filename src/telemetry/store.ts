@@ -5,7 +5,7 @@
  * No disk I/O in the hot path. Data resets on proxy restart.
  */
 
-import type { RequestMetric, TelemetrySummary, ITelemetryStore, TelemetryRetention } from "./types"
+import type { RequestMetric, TelemetrySummary, ITelemetryStore, TelemetryRetention, TelemetryClientKey, TelemetryFilter } from "./types"
 import { computeSummary } from "./percentiles"
 import { getPricingOverrides } from "./pricingStore"
 import { getSetting } from "../settings"
@@ -70,8 +70,8 @@ export class MemoryTelemetryStore implements ITelemetryStore {
    * @param options.since - Only entries after this timestamp
    * @param options.model - Filter by model name
    */
-  getRecent(options: { limit?: number; since?: number; model?: string } = {}): RequestMetric[] {
-    const { limit = 50, since, model } = options
+  getRecent(options: { limit?: number; since?: number; model?: string; clientKeyId?: string } = {}): RequestMetric[] {
+    const { limit = 50, since, model, clientKeyId } = options
     const results: RequestMetric[] = []
 
     // Walk backwards from most recent entry
@@ -81,6 +81,7 @@ export class MemoryTelemetryStore implements ITelemetryStore {
       if (!metric) continue
       if (since && metric.timestamp < since) break // ring buffer is time-ordered
       if (model && metric.model !== model) continue
+      if (clientKeyId && (clientKeyId === "unattributed" ? metric.clientKeyId !== undefined : metric.clientKeyId !== clientKeyId)) continue
       results.push(metric)
     }
 
@@ -104,10 +105,20 @@ export class MemoryTelemetryStore implements ITelemetryStore {
    * Compute aggregate statistics over a time window.
    * @param windowMs - Time window in ms (default: 1 hour)
    */
-  summarize(windowMs: number = 60 * 60 * 1000): TelemetrySummary {
+  summarize(windowMs: number = 60 * 60 * 1000, filter: TelemetryFilter = {}): TelemetrySummary {
     const since = Date.now() - windowMs
-    const metrics = this.getRecent({ limit: this.capacity, since })
+    const metrics = this.getRecent({ limit: this.capacity, since, ...filter })
     return computeSummary(metrics, windowMs, getPricingOverrides())
+  }
+
+  getClientKeys(): TelemetryClientKey[] {
+    const keys = new Map<string, TelemetryClientKey>()
+    for (const metric of this.getRecent({ limit: this.capacity })) {
+      if (metric.clientKeyId && !keys.has(metric.clientKeyId)) keys.set(metric.clientKeyId, {
+        id: metric.clientKeyId, name: metric.clientKeyName ?? metric.clientKeyId,
+      })
+    }
+    return [...keys.values()]
   }
 
   /** Clear all stored metrics. */

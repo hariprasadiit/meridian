@@ -8,6 +8,10 @@
  * "which account rate-limited me?" was unanswerable from telemetry. See #829.
  */
 import { describe, it, expect, beforeEach, afterEach } from "bun:test"
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { createClientKey } from "../clientKeys"
 import { assistantMessage, withMockSdkSessionId } from "./helpers"
 
 import { installSdkMock } from "./sdkMock"
@@ -79,6 +83,42 @@ describe("error-path telemetry records the profile that failed", () => {
     for (const [k, v] of Object.entries(savedEnv)) {
       if (v === undefined) delete process.env[k]
       else process.env[k] = v
+    }
+  })
+
+  it.each([
+    { stream: false, failover: false }, { stream: true, failover: false },
+    { stream: false, failover: true }, { stream: true, failover: true },
+  ])("attributes completed requests and failover hops to their authenticated key: %j", async ({ stream, failover }) => {
+    const fields = ["MERIDIAN_API_KEY", "MERIDIAN_CONFIG_DIR", "MERIDIAN_CLIENT_KEY_HASHES"]
+    const original = Object.fromEntries(fields.map(key => [key, process.env[key]]))
+    const directory = mkdtempSync(join(tmpdir(), "meridian-key-metric-"))
+    try {
+      process.env.MERIDIAN_API_KEY = "owned-test-admin"
+      process.env.MERIDIAN_CONFIG_DIR = directory
+      delete process.env.MERIDIAN_CLIENT_KEY_HASHES
+      const created = createClientKey("Owned laptop")
+      if (failover) failingDirs.add("meridian-errtel-work")
+      const { app } = createProxyServer({ port: 0, host: "127.0.0.1", profiles: PROFILES, defaultProfile: "work" })
+      const requestId = crypto.randomUUID()
+      const response = await app.fetch(new Request("http://localhost/v1/messages", {
+        method: "POST", headers: { "content-type": "application/json", "x-request-id": requestId,
+          authorization: `Bearer ${created.key}`, "x-meridian-client-key-id": "spoofed" },
+        body: JSON.stringify({ model: "haiku", max_tokens: 128, stream, messages: [{ role: "user", content: "hello" }] }),
+      }))
+      expect(response.status).toBe(200)
+      expect(await response.text()).toContain("ok from")
+      const rows = telemetryStore.getRecent({ limit: 500 }).filter(row => row.requestId === requestId)
+      expect(rows).toHaveLength(failover ? 2 : 1)
+      expect(rows.every(row => row.clientKeyId === created.credential.id && row.clientKeyName === "Owned laptop")).toBe(true)
+      if (failover) expect(new Set(rows.map(row => row.profileId))).toEqual(new Set(["work", "personal"]))
+      expect(JSON.stringify(rows)).not.toContain(created.key)
+      expect((await app.fetch(new Request("http://localhost/telemetry/client-keys", {
+        headers: { "x-api-key": created.key },
+      }))).status).toBe(401)
+    } finally {
+      for (const [key, value] of Object.entries(original)) { if (value === undefined) delete process.env[key]; else process.env[key] = value }
+      rmSync(directory, { recursive: true, force: true })
     }
   })
 

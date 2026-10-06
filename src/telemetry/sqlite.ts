@@ -1,6 +1,6 @@
 import Database from "libsql"
 import { statSync } from "node:fs"
-import type { RequestMetric, TelemetrySummary, ITelemetryStore, IDiagnosticLogStore, DiagnosticLog, TelemetryRetention } from "./types"
+import type { RequestMetric, TelemetrySummary, ITelemetryStore, IDiagnosticLogStore, DiagnosticLog, TelemetryRetention, TelemetryClientKey, TelemetryFilter } from "./types"
 import { computeSummary } from "./percentiles"
 import { getPricingOverrides } from "./pricingStore"
 
@@ -45,7 +45,9 @@ CREATE TABLE IF NOT EXISTS metrics (
   route_kind           TEXT,
   route_group_id       TEXT,
   route_attempt        INTEGER,
-  route_refused_bucket TEXT
+  route_refused_bucket TEXT,
+  client_key_id        TEXT,
+  client_key_name      TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_metrics_ts    ON metrics(timestamp);
 CREATE INDEX IF NOT EXISTS idx_metrics_model ON metrics(model);
@@ -59,6 +61,8 @@ CREATE INDEX IF NOT EXISTS idx_metrics_session_success ON metrics(sdk_session_id
  * Each entry runs at startup; errors (column already exists) are ignored.
  */
 const METRICS_MIGRATIONS = [
+  "ALTER TABLE metrics ADD COLUMN client_key_id TEXT",
+  "ALTER TABLE metrics ADD COLUMN client_key_name TEXT",
   "ALTER TABLE metrics ADD COLUMN request_source TEXT",
   "ALTER TABLE metrics ADD COLUMN profile_id TEXT",
   "ALTER TABLE metrics ADD COLUMN envelope_violations TEXT",
@@ -96,6 +100,7 @@ function openDatabase(dbPath: string): Database.Database {
   for (const sql of METRICS_MIGRATIONS) {
     try { db.exec(sql) } catch { /* column already exists */ }
   }
+  db.exec("CREATE INDEX IF NOT EXISTS idx_metrics_client_key_ts ON metrics(client_key_id, timestamp)")
   return db
 }
 
@@ -123,7 +128,7 @@ class SqliteTelemetryStore implements ITelemetryStore {
         upstream_duration_ms, total_duration_ms, content_blocks, text_events, error,
         input_tokens, output_tokens, cache_read_input_tokens,
         cache_creation_input_tokens, cache_hit_rate, profile_id, envelope_violations,
-        route_kind, route_group_id, route_attempt, route_refused_bucket
+        route_kind, route_group_id, route_attempt, route_refused_bucket, client_key_id, client_key_name
       ) VALUES (
         @requestId, @timestamp, @adapter, @requestSource, @model, @requestModel, @mode,
         @isResume, @isPassthrough, @lineageType,
@@ -133,7 +138,7 @@ class SqliteTelemetryStore implements ITelemetryStore {
         @upstreamDurationMs, @totalDurationMs, @contentBlocks, @textEvents, @error,
         @inputTokens, @outputTokens, @cacheReadInputTokens,
         @cacheCreationInputTokens, @cacheHitRate, @profileId, @envelopeViolations,
-        @routeKind, @routeGroupId, @routeAttempt, @routeRefusedBucket
+        @routeKind, @routeGroupId, @routeAttempt, @routeRefusedBucket, @clientKeyId, @clientKeyName
       )
     `)
 
@@ -146,6 +151,8 @@ class SqliteTelemetryStore implements ITelemetryStore {
   record(metric: RequestMetric): void {
     try {
       this.insertStmt.run({
+        clientKeyId: metric.clientKeyId ?? null,
+        clientKeyName: metric.clientKeyName ?? null,
         requestId: metric.requestId,
         timestamp: metric.timestamp,
         adapter: metric.adapter ?? null,
@@ -233,8 +240,8 @@ class SqliteTelemetryStore implements ITelemetryStore {
     return total
   }
 
-  getRecent(options: { limit?: number; since?: number; model?: string } = {}): RequestMetric[] {
-    const { limit = 50, since, model } = options
+  getRecent(options: { limit?: number; since?: number; model?: string; clientKeyId?: string } = {}): RequestMetric[] {
+    const { limit = 50, since, model, clientKeyId } = options
     const conditions: string[] = []
     const params: Record<string, unknown> = { limit }
 
@@ -246,6 +253,9 @@ class SqliteTelemetryStore implements ITelemetryStore {
       conditions.push("model = @model")
       params.model = model
     }
+
+    if (clientKeyId === "unattributed") conditions.push("client_key_id IS NULL")
+    else if (clientKeyId) { conditions.push("client_key_id = @clientKeyId"); params.clientKeyId = clientKeyId }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""
     const sql = `SELECT * FROM metrics ${where} ORDER BY timestamp DESC, id DESC LIMIT @limit`
@@ -269,10 +279,17 @@ class SqliteTelemetryStore implements ITelemetryStore {
     }
   }
 
-  summarize(windowMs: number = 60 * 60 * 1000): TelemetrySummary {
+  summarize(windowMs: number = 60 * 60 * 1000, filter: TelemetryFilter = {}): TelemetrySummary {
     const since = Date.now() - windowMs
-    const metrics = this.getRecent({ limit: 100_000, since })
+    const metrics = this.getRecent({ limit: 100_000, since, ...filter })
     return computeSummary(metrics, windowMs, getPricingOverrides())
+  }
+
+  getClientKeys(): TelemetryClientKey[] {
+    const rows = this.db.prepare(`SELECT client_key_id AS id, client_key_name AS name FROM metrics
+      WHERE id IN (SELECT MAX(id) FROM metrics WHERE client_key_id IS NOT NULL GROUP BY client_key_id)`)
+      .all() as { id: string; name: string | null }[]
+    return rows.map(row => ({ id: row.id, name: row.name ?? row.id }))
   }
 
   clear(): void {
@@ -381,6 +398,8 @@ function parseEnvelopeViolations(raw: unknown): string[] | undefined {
 
 function rowToMetric(r: Record<string, unknown>): RequestMetric {
   return {
+    clientKeyId: (r.client_key_id as string) ?? undefined,
+    clientKeyName: (r.client_key_name as string) ?? undefined,
     requestId: r.request_id as string,
     timestamp: r.timestamp as number,
     adapter: (r.adapter as string) ?? undefined,

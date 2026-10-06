@@ -110,12 +110,14 @@ export function revokeClientKey(id: string): ClientKeyInfo {
   return publicInfo({ ...key, revokedAt: new Date().toISOString() })
 }
 
-export function hasValidClientKey(provided: string): boolean {
+export function findClientKey(provided: string): Pick<ClientKeyInfo, "id" | "name"> | undefined {
   const candidate = Buffer.from(hashKey(provided), "hex")
-  let matched = false
+  let matched: Pick<ClientKeyInfo, "id" | "name"> | undefined
   for (const key of load().keys) {
     const equal = timingSafeEqual(candidate, Buffer.from(key.hash, "hex"))
-    matched = (equal && key.revokedAt === null) || matched
+    if (equal && key.revokedAt === null && !matched) matched = { id: key.id, name: key.name }
   }
   return matched
 }
+
+export function hasValidClientKey(provided: string): boolean { return findClientKey(provided) !== undefined }

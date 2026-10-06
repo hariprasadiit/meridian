@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { Hono } from "hono"
 import { createClientKey, hasValidClientKey, listClientKeys, revokeClientKey } from "../clientKeys"
 import { clientKeyResponse } from "../clientKeyRoutes"
-import { authEnabled, hasValidApiKey, requireAuth } from "../proxy/auth"
+import { authEnabled, clientKeyMetric, hasValidApiKey, requireAuth } from "../proxy/auth"
 
 let directory: string
 let saved: Record<string, string | undefined>
@@ -107,6 +107,22 @@ describe("native client key registry", () => {
 })
 
 describe("client key boundary", () => {
+  it("attributes both valid credential headers using public metadata only, without trusting client identity headers", async () => {
+    const { key, credential } = createClientKey("Laptop")
+    const server = new Hono()
+    server.use("*", requireAuth)
+    server.post("/v1/messages", c => c.json(clientKeyMetric(c)))
+    const credentials: Record<string, string>[] = [{ "x-api-key": key }, { authorization: `Bearer ${key}` }]
+    for (const headers of credentials) {
+      const response = await server.fetch(new Request("http://meridian.test/v1/messages", {
+        method: "POST", headers: { ...headers, "x-meridian-client-key-id": "spoofed" }, body: "{}",
+      }))
+      expect(await response.json()).toEqual({ clientKeyId: credential.id, clientKeyName: "Laptop" })
+    }
+    const admin = await server.fetch(request("/v1/messages", "test-admin", { method: "POST", body: "{}" }))
+    expect(await admin.json()).toEqual({ clientKeyId: "admin", clientKeyName: "Administrator" })
+    expect((await server.fetch(request("/v1/messages", "invalid", { method: "POST", body: "{}" }))).status).toBe(401)
+  })
   it("accepts both client headers, forwards body/header unchanged, and denies all administration", async () => {
     const server = app(), { key } = createClientKey("employee")
     const credentials: Record<string, string>[] = [{ "x-api-key": key }, { authorization: `Bearer ${key}` }]

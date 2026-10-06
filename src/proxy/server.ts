@@ -97,8 +97,9 @@ import { translateResponsesToAnthropic, translateAnthropicToResponses, createRes
 import { flattenAssistantContent, normalizeStructuredUserContent, replayToolResultHeader, frameStructuredReplay, coalesceStructuredUserMessages, coalesceTrailingSystemReminders } from "./replay"
 import { unstreamedAssistantBlockFrames } from "./unstreamedAssistant"
 import { extractAdvisorModel, extractSystemText, getLastUserMessage, stripAdvisorTools, stripNonStandardStreamFields, MULTIMODAL_TYPES, buildToolUseIndex, frameReplayTurns } from "./messages"
-import { requireAuth, authEnabled } from "./auth"
+import { requireAuth, authEnabled, clientKeyMetric } from "./auth"
 import { clientKeyResponse } from "../clientKeyRoutes"
+import { clientKeysConfigured, listClientKeys } from "../clientKeys"
 import { keysPageHtml } from "../telemetry/keysPage"
 import { detectAdapter } from "./adapters/detect"
 import { rootSessionIdOf } from "./adapter"
@@ -2806,6 +2807,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
           const conflictTotalMs = Date.now() - requestStartAt
           const conflictQueueWaitMs = totalQueueWaitMs(requestMeta)
           telemetryStore.record({
+            ...clientKeyMetric(c),
             requestId: requestMeta.requestId,
             timestamp: Date.now(),
             adapter: adapter.name,
@@ -4731,6 +4733,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
             passthrough
           )
           telemetryStore.record({
+            ...clientKeyMetric(c),
             requestId: requestMeta.requestId,
             timestamp: Date.now(),
             adapter: adapter.name,
@@ -6707,6 +6710,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                   passthrough
                 )
                 telemetryStore.record({
+                  ...clientKeyMetric(c),
                   requestId: requestMeta.requestId,
                   timestamp: Date.now(),
                   adapter: adapter.name,
@@ -7224,6 +7228,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                 const recoverTotalMs = Date.now() - requestStartAt
                 const recoverQueueWaitMs = totalQueueWaitMs(requestMeta)
                 telemetryStore.record({
+                  ...clientKeyMetric(c),
                   requestId: requestMeta.requestId,
                   timestamp: Date.now(),
                   adapter: adapter.name,
@@ -7375,6 +7380,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
                 const cappedTotalMs = Date.now() - requestStartAt
                 const cappedQueueWaitMs = totalQueueWaitMs(requestMeta)
                 telemetryStore.record({
+                  ...clientKeyMetric(c),
                   requestId: requestMeta.requestId,
                   timestamp: Date.now(),
                   adapter: adapter.name,
@@ -7445,6 +7451,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
               const streamErrTotalMs = Date.now() - requestStartAt
               const streamErrQueueWaitMs = totalQueueWaitMs(requestMeta)
               telemetryStore.record({
+                ...clientKeyMetric(c),
                 requestId: requestMeta.requestId,
                 timestamp: Date.now(),
                 adapter: adapter.name,
@@ -7655,6 +7662,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
         const errorQueueWaitMs = totalQueueWaitMs(requestMeta)
         const errorTotalMs = Date.now() - requestStartAt
         telemetryStore.record({
+          ...clientKeyMetric(c),
           requestId: requestMeta.requestId,
           timestamp: Date.now(),
           adapter: adapter.name,
@@ -7992,6 +8000,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
               // symptom this whole feature can cause.
               const cancelledWaitMs = Date.now() - queueEnteredAt
               telemetryStore.record({
+                ...clientKeyMetric(c),
                 requestId,
                 timestamp: Date.now(),
                 adapter: adapter.name,
@@ -8117,6 +8126,7 @@ export function createProxyServer(config: Partial<ProxyConfig> = {}): ProxyServe
 
   // Telemetry dashboard and API
   app.route("/telemetry", createTelemetryRoutes({
+    getClientKeys: () => clientKeysConfigured() ? listClientKeys().map(({ id, name }) => ({ id, name })) : [],
     getSessionTree: () => processSessionTree.stats(),
   }))
 

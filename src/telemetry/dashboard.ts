@@ -47,12 +47,15 @@ export const dashboardHtml = `<!DOCTYPE html>
   .pct-table td:first-child { font-weight: 500; }
   .pct-table .phase-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
   .mono { font-family: 'SF Mono', SFMono-Regular, Consolas, monospace; font-size: 12px; }
-  .refresh-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+  .refresh-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
   .refresh-bar select, .refresh-bar button {
     background: var(--surface); color: var(--text); border: 1px solid var(--border);
     border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
   }
   .refresh-bar button:hover { border-color: var(--accent); }
+  .refresh-bar select { max-width: 100%; }
+  #content { min-width: 0; overflow-x: auto; }
+  .key-name { display: inline-block; max-width: 12rem; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; white-space: nowrap; }
   .refresh-indicator { font-size: 11px; color: var(--muted); }
   .retention { font-size: 11px; color: var(--muted); margin: -8px 0 16px; }
   .empty { text-align: center; padding: 48px; color: var(--muted); }
@@ -89,17 +92,20 @@ export const dashboardHtml = `<!DOCTYPE html>
 <div class="subtitle">Request performance, cost, and wire-contract integrity</div>
 
 <div class="refresh-bar">
-  <select id="window">
+  <select id="window" aria-label="Time window">
     <option value="300000">Last 5 min</option>
     <option value="900000">Last 15 min</option>
     <option value="3600000" selected>Last 1 hour</option>
     <option value="86400000">Last 24 hours</option>
   </select>
+  <label for="clientKey">API key</label>
+  <select id="clientKey"><option value="">All API keys</option><option value="unattributed">Unattributed</option></select>
   <button onclick="refresh()">Refresh</button>
   <label><input type="checkbox" id="autoRefresh" checked> Auto (5s)</label>
   <span class="refresh-indicator" id="lastUpdate"></span>
 </div>
 
+<p class="usage-note" id="key-scope" style="margin-bottom:16px">Older requests without key identity are Unattributed.</p>
 <div class="retention" id="retention"></div>
 
 <div id="content"><div class="empty">Loading…</div></div>
@@ -110,6 +116,10 @@ const $$ = s => document.querySelectorAll(s);
 let timer;
 let activeTab = 'requests';
 let activeLogFilter = 'all';
+let refreshVersion = 0;
+const initialKey = new URL(location.href).searchParams.get('clientKeyId') || '';
+if (initialKey && initialKey !== 'unattributed') $('#clientKey').add(new Option('Selected key · ' + initialKey.slice(0, 8), initialKey));
+$('#clientKey').value = initialKey;
 
 
 
@@ -172,25 +182,55 @@ function setLogFilter(filter) {
   });
 }
 
+function renderKeyChoices(keys, selected) {
+  const select = $('#clientKey');
+  select.replaceChildren(new Option('All API keys', ''), new Option('Unattributed', 'unattributed'));
+  for (const key of keys) {
+    const label = key.name + (key.active === false ? ' (deleted)' : '')
+      + (key.id === 'admin' ? '' : ' · ' + key.id.slice(0, 8));
+    select.add(new Option(label, key.id));
+  }
+  if (selected && !Array.from(select.options).some(option => option.value === selected)) {
+    select.add(new Option('Selected key · ' + selected.slice(0, 8), selected));
+  }
+  select.value = selected;
+  $('#key-scope').textContent = selected
+    ? 'Request statistics are filtered by API key. Server logs and live account health show all keys.'
+    : 'Older requests without key identity are Unattributed.';
+}
+
+async function readTelemetry(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('Unable to load telemetry');
+  return response.json();
+}
+
 async function refresh() {
+  const version = ++refreshVersion;
   const w = $('#window').value;
+  const selected = $('#clientKey').value;
+  const keyQuery = selected ? '&clientKeyId=' + encodeURIComponent(selected) : '';
   try {
-    const [summary, reqs, logs, routes, health, retention] = await Promise.all([
-      fetch('/telemetry/summary?window=' + w).then(r => r.json()),
-      fetch('/telemetry/requests?limit=50&since=' + (Date.now() - Number(w))).then(r => r.json()),
-      fetch('/telemetry/logs?limit=200&since=' + (Date.now() - Number(w))).then(r => r.json()),
-      fetch('/telemetry/routes?window=' + w).then(r => r.json()),
+    const [summary, reqs, logs, routes, health, retention, choices] = await Promise.all([
+      readTelemetry('/telemetry/summary?window=' + w + keyQuery),
+      readTelemetry('/telemetry/requests?limit=50&since=' + (Date.now() - Number(w)) + keyQuery),
+      readTelemetry('/telemetry/logs?limit=200&since=' + (Date.now() - Number(w))),
+      readTelemetry('/telemetry/routes?window=' + w + keyQuery),
       // Lives on the proxy app, not under /telemetry, so it is absent when the
       // telemetry routes are mounted standalone. The accounts table degrades to
       // "no live state known" rather than failing the whole refresh.
       fetch('/profiles/health').then(r => r.json()).catch(function() { return null; }),
-      fetch('/telemetry/retention').then(r => r.json()),
+      readTelemetry('/telemetry/retention'),
+      readTelemetry('/telemetry/client-keys'),
     ]);
+    if (version !== refreshVersion) return;
+    renderKeyChoices(choices.keys, selected);
     render(summary, reqs, logs, routes, health);
     renderRetention(retention);
     $('#lastUpdate').textContent = 'Updated ' + new Date().toLocaleTimeString();
   } catch (e) {
-    $('#content').innerHTML = '<div class="empty">Failed to load telemetry</div>';
+    if (version !== refreshVersion) return;
+    $('#content').innerHTML = '<div class="empty">Failed to load telemetry. Try Refresh.</div>';
   }
 }
 
@@ -388,7 +428,9 @@ function accountsHtml(routes, s, health) {
 
 function render(s, reqs, logs, routes, health) {
   if (s.totalRequests === 0 && (!logs || logs.length === 0)) {
-    $('#content').innerHTML = '<div class="empty">No requests recorded yet. Send a request through the proxy to see telemetry.</div>';
+    $('#content').innerHTML = '<div class="empty">' + ($('#clientKey').value
+      ? 'No requests recorded for this API key in the selected time window.'
+      : 'No requests recorded yet. Send a request through the proxy to see telemetry.') + '</div>';
     return;
   }
 
@@ -404,7 +446,7 @@ function render(s, reqs, logs, routes, health) {
     + '<div class="tab' + (activeTab === 'requests' ? ' active' : '') + '" data-tab="requests" onclick="switchTab(&apos;requests&apos;)">'
     +   'Requests<span class="tab-badge">' + reqs.length + '</span></div>'
     + '<div class="tab' + (activeTab === 'logs' ? ' active' : '') + '" data-tab="logs" onclick="switchTab(&apos;logs&apos;)">'
-    +   'Logs<span class="tab-badge">' + logs.length + '</span></div>'
+    +   'Server logs<span class="tab-badge">' + logs.length + '</span></div>'
     + '</div>';
 
   // ==================== Overview tab ====================
@@ -526,7 +568,7 @@ function render(s, reqs, logs, routes, health) {
     + '<span><span class="legend-dot" style="background:var(--yellow)"></span>Proxy</span>'
     + '<span><span class="legend-dot" style="background:var(--upstream)"></span>Response</span>'
     + '</div>'
-    + '<table><thead><tr><th>Time</th><th>Adapter</th><th>Route</th><th>Model</th><th>Mode</th><th>Session</th><th>Status</th>'
+    + '<table><thead><tr><th>Time</th><th>API key</th><th>Adapter</th><th>Route</th><th>Model</th><th>Mode</th><th>Session</th><th>Status</th>'
     + '<th>Queue</th><th>Proxy</th><th>TTFB</th><th>Total</th><th>Tokens</th><th>Cache</th><th>Waterfall</th></tr></thead><tbody>';
 
   const maxTotal = Math.max(...reqs.map(r => r.totalDurationMs), 1);
@@ -548,8 +590,9 @@ function render(s, reqs, logs, routes, health) {
 
     const sourceBadge = r.requestSource ? '<br><span class="mono" style="font-size:9px;color:var(--violet)">' + r.requestSource + '</span>' : '';
 
-    html += '<tr>'
+    html += '<tr class="request-row" data-client-key-id="' + esc(r.clientKeyId || 'unattributed') + '">'
       + '<td class="mono">' + ago(r.timestamp) + '</td>'
+      + '<td><span class="key-name" title="' + esc(r.clientKeyId || 'Unattributed') + '">' + esc(r.clientKeyName || 'Unattributed') + '</span></td>'
       + '<td>' + (r.adapter || '—') + sourceBadge + '</td>'
       + '<td>' + routeHtml(r) + '</td>'
       + '<td>' + (r.requestModel || r.model) + '<br><span style="font-size:10px;color:var(--muted)">' + r.model + '</span></td>'
@@ -622,6 +665,13 @@ $('#autoRefresh').addEventListener('change', function() {
   if (this.checked) timer = setInterval(refresh, 5000);
 });
 $('#window').addEventListener('change', refresh);
+$('#clientKey').addEventListener('change', function() {
+  const url = new URL(location.href);
+  if (this.value) url.searchParams.set('clientKeyId', this.value);
+  else url.searchParams.delete('clientKeyId');
+  history.replaceState(null, '', url);
+  refresh();
+});
 
 refresh();
 timer = setInterval(refresh, 5000);

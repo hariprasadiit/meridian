@@ -1509,6 +1509,16 @@ opencode run --model anthropic/claude-sonnet-4-5 --session "$SESSION_ID" --forma
 
 **Verifies:** Telemetry dashboard and API endpoints return data after requests.
 
+For the Vizmo native-key integration, run
+`E2E_PORT=42234 bun scripts/e2e-client-key-telemetry.mjs` for an isolated dashboard
+with synthetic usage. Check the API key selector, filtered token/cache totals,
+Unattributed history, separate deleted/replacement identities, URL reload,
+keyboard access, escaped key labels and narrow viewports. This fixture makes no
+model calls. Live acceptance additionally requires actual Claude Code calls
+under two disposable keys and matching `/telemetry/requests`, `/summary` and
+`/routes` filters; the integration repository's
+`tasks/check-meridian-key-filter.py` retains that runnable production probe.
+
 ```bash
 # Dashboard HTML
 curl -s http://127.0.0.1:3456/telemetry | head -3
