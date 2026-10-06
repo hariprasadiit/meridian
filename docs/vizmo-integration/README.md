@@ -60,6 +60,15 @@ retention; memory telemetry retains its existing restart/reset behavior.
 Authentication attribution does not change upstream requests or session/cache
 handling. It adds no prompt logging.
 
+This deployment enables `MERIDIAN_TELEMETRY_PERSIST=1` and
+`MERIDIAN_TELEMETRY_RETENTION_DAYS=7`. SQLite uses the existing persistent home
+volume, with WAL and a key/timestamp index; no separate database service is
+needed. The "only N minutes held" label reports actual available history, not
+the retention limit. Available history grows as records accumulate. Memory
+history exported around deployment was migrated with its original timestamps
+and usage values; retained data and a fresh native CLI write survived a real
+restart. See `live-verification.json` for these bounded acceptance results.
+
 ## Cache behavior
 
 Auto-mode classifier calls retain the root's account affinity but never acquire
