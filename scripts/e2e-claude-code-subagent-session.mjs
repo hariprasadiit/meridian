@@ -13,15 +13,16 @@ import { spawn, spawnSync } from 'node:child_process'
 import { spyOn } from 'bun:test'
 
 const switches = new Set(['expect-unfixed', 'rehearsal', 'fail-after-copy', 'synthetic'])
-const names = new Set(['target-root', 'entry', 'source-head', 'client', 'client-version', 'native-cli', 'native-cli-version', 'sdk-version', 'model', 'served-model', 'grant-file', 'proof-dir', 'max-queries', 'max-cost-usd', 'timeout-ms'])
+const names = new Set(['target-root', 'entry', 'source-head', 'client', 'client-version', 'native-cli', 'native-cli-version', 'sdk-version', 'model', 'served-model', 'grant-file', 'proof-dir', 'max-queries', 'max-cost-usd', 'timeout-ms', 'defer-tool-threshold'])
 const args = {}
 for (let i = 2; i < process.argv.length; i++) {
   const key = process.argv[i].replace(/^--/, '')
   assert(process.argv[i].startsWith('--') && (switches.has(key) || names.has(key)) && !(key in args), 'Unknown or repeated harness option')
   args[key] = switches.has(key) ? true : process.argv[++i]
 }
-for (const key of names) if (key !== 'source-head') assert(typeof args[key] === 'string' && args[key].length > 0, `Missing --${key}`)
+for (const key of names) if (key !== 'source-head' && key !== 'defer-tool-threshold') assert(typeof args[key] === 'string' && args[key].length > 0, `Missing --${key}`)
 const synthetic = args.synthetic === true, rehearsal = args.rehearsal === true
+assert(args['defer-tool-threshold'] === undefined || /^(0|[1-9][0-9]{0,2})$/.test(args['defer-tool-threshold']), 'Invalid server deferral threshold')
 assert(synthetic || (process.platform === 'linux' && ['x64', 'arm64'].includes(process.arch)), 'Native E72 acceptance requires Linux x64 or arm64')
 assert(args['client-version'] === '2.1.287', 'E72 requires the implicated Claude Code client 2.1.287')
 assert(/^claude-sonnet-[0-9][a-z0-9.-]*$/.test(args.model) && /^claude-sonnet-[0-9][a-z0-9.-]*$/.test(args['served-model']), 'Explicit implicated requested and served Sonnet IDs required')
@@ -296,6 +297,8 @@ try {
   if (args['fail-after-copy']) throw new Error('Injected post-copy failure')
   for (const key of Object.keys(process.env)) if (/^(CLAUDE|ANTHROPIC|MERIDIAN|CLAUDE_PROXY|OPENAI|AWS_|GOOGLE_|VERTEX_|BEDROCK_|NODE_OPTIONS|BUN_OPTIONS|OPENCODE_)/.test(key)) delete process.env[key]
   Object.assign(process.env, { HOME: join(scratch, 'proxy-home'), CLAUDE_CONFIG_DIR: join(scratch, 'unlinked-default'), MERIDIAN_CONFIG_DIR: config, MERIDIAN_SESSION_DIR: join(scratch, 'store'), MERIDIAN_WORKDIR: work, MERIDIAN_CLAUDE_PATH: native, MERIDIAN_CREDENTIALS_READONLY: '1', MERIDIAN_NO_UPDATE_CHECK: '1', MERIDIAN_TELEMETRY_PERSIST: '0', MERIDIAN_ROUTING: 'active', MERIDIAN_PASSTHROUGH: '1', MERIDIAN_MAX_CONCURRENT: '4', MERIDIAN_SHUTDOWN_GRACE_MS: '2000' })
+  if (args['defer-tool-threshold'] !== undefined) process.env.MERIDIAN_DEFER_TOOL_THRESHOLD = args['defer-tool-threshold']
+  proof.serverDeferToolThreshold = args['defer-tool-threshold'] === undefined ? 'default' : Number(args['defer-tool-threshold'])
   proof.sdkCapacity = 4
   for (const kind of ['CONFIG', 'DATA', 'CACHE', 'STATE']) { const directory = join(scratch, `proxy-xdg-${kind.toLowerCase()}`); mkdirSync(directory, { mode: 0o700 }); process.env[`XDG_${kind}_HOME`] = directory }
   const clientEnv = { ...process.env }
@@ -318,8 +321,8 @@ try {
     assert(!stop.signal.aborted && proof.queries.length < maximum, 'Generation count/deadline bound reached')
     assert(input.options.env?.CLAUDE_CONFIG_DIR === account && input.options.pathToClaudeCodeExecutable === native, 'SDK escaped explicit account/executable')
     assert(!input.options.env?.ANTHROPIC_API_KEY && !input.options.env?.ANTHROPIC_BASE_URL && !input.options.env?.CLAUDE_CODE_OAUTH_TOKEN, 'SDK inherited another authentication/provider override')
-    const row = { turn, requested: /^[a-z0-9[\].-]+$/.test(input.options.model) ? input.options.model : 'invalid-requested-model', versionPin: input.options.env?.ANTHROPIC_DEFAULT_SONNET_MODEL === undefined ? undefined : /^claude-sonnet-[0-9][a-z0-9.-]*$/.test(input.options.env.ANTHROPIC_DEFAULT_SONNET_MODEL) ? input.options.env.ANTHROPIC_DEFAULT_SONNET_MODEL : 'invalid-version-pin', resumed: typeof input.options.resume === 'string', resumedSession: sessionOrdinal(input.options.resume), forked: input.options.forkSession === true, requestedSession: sessionOrdinal(input.options.sessionId), maxTurns: input.options.maxTurns, nativeModels: [], completed: false, assistantError: false, resultFlagValid: false, resultIsError: null, inputTokens: 0, outputTokens: 0, estimatedCostUsd: null }
-    const tools = new Map(); sdkTools.set(row, tools)
+    const row = { turn, requested: /^[a-z0-9[\].-]+$/.test(input.options.model) ? input.options.model : 'invalid-requested-model', versionPin: input.options.env?.ANTHROPIC_DEFAULT_SONNET_MODEL === undefined ? undefined : /^claude-sonnet-[0-9][a-z0-9.-]*$/.test(input.options.env.ANTHROPIC_DEFAULT_SONNET_MODEL) ? input.options.env.ANTHROPIC_DEFAULT_SONNET_MODEL : 'invalid-version-pin', resumed: typeof input.options.resume === 'string', resumedSession: sessionOrdinal(input.options.resume), forked: input.options.forkSession === true, requestedSession: sessionOrdinal(input.options.sessionId), maxTurns: input.options.maxTurns, nativeModels: [], assistantMessages: 0, assistantGenerations: 0, completed: false, assistantError: false, resultFlagValid: false, resultIsError: null, inputTokens: 0, outputTokens: 0, estimatedCostUsd: null }
+    const tools = new Map(), generatedMessageIds = new Set(); sdkTools.set(row, tools)
     proof.queries.push(row)
     const query = original({ ...input, options: { ...input.options, maxBudgetUsd: costLimit / maximum } }); active.add(query)
     const abort = () => {
@@ -336,6 +339,10 @@ try {
             const model = event.type === 'assistant' ? event.message?.model : event.type === 'stream_event' && event.event?.type === 'message_start' ? event.event.message?.model : undefined
             if (typeof model === 'string' && !row.nativeModels.includes(model)) row.nativeModels.push(/^claude-[a-z0-9.-]+$/.test(model) ? model : 'invalid-native-model')
             if (event.type === 'assistant') {
+              row.assistantMessages++
+              const messageId = event.message?.id
+              if (typeof messageId !== 'string' || !generatedMessageIds.has(messageId)) row.assistantGenerations++
+              if (typeof messageId === 'string') generatedMessageIds.add(messageId)
               row.assistantError ||= Boolean(event.error)
               const text = (event.message?.content ?? []).filter(block => block.type === 'text' && typeof block.text === 'string').map(block => block.text).join('')
               if (text.length) { const collected = (sdkTexts.get(row) ?? '') + text; assert(Buffer.byteLength(collected) <= 2 * 1024 * 1024, 'SDK text receipt byte bound reached'); sdkTexts.set(row, collected) }
@@ -436,7 +443,10 @@ try {
       const requests = new Set([...tools.keys()].map(id => httpTools.get(id)?.request))
       row.toolRequest = tools.size > 0 && requests.size === 1 && !requests.has(undefined) ? [...requests][0] : undefined
       row.toolCount = tools.size
-      row.acceptedCanonicalResult = row.resultFlagValid && ((row.resultSubtype === 'success' && row.resultIsError === false) || (row.resultSubtype === 'error_max_turns' && row.resultIsError === true && row.maxTurns === 1 && row.nativeTurns === 1 && ['absent', 'max_turns'].includes(row.terminalReason) && row.canonicalHttpToolTerminal))
+      // This CLI counts the synthetic denied tool result in num_turns;
+      // accept it only with exactly one generated message and its HTTP terminal.
+      // Parallel tool blocks can arrive as several events with the same message ID.
+      row.acceptedCanonicalResult = row.resultFlagValid && ((row.resultSubtype === 'success' && row.resultIsError === false) || (row.resultSubtype === 'error_max_turns' && row.resultIsError === true && row.maxTurns === 1 && [1, 2].includes(row.nativeTurns) && row.assistantGenerations === 1 && ['absent', 'max_turns'].includes(row.terminalReason) && row.canonicalHttpToolTerminal))
     }
     proof.wire = wire; proof.lineage = records; proof.peakParallelAgentRequests = peakAgents
     const decision = row => records.filter(record => record.request === row.request)
