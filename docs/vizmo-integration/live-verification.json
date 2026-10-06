@@ -146,5 +146,126 @@
     "privateRuntimeRemoved": true,
     "cleanupFailures": [],
     "sdkQueries": 9
+  },
+  "opusHighProductionCli": {
+    "result": "PASS",
+    "date": "2026-10-06",
+    "platform": "Linux ARM64",
+    "cliVersion": "2.1.287",
+    "model": "claude-opus-5-5",
+    "effort": "high",
+    "thinkingWorkaround": false,
+    "clientBashPreflight": true,
+    "cases": {
+      "readTool": {
+        "pass": true,
+        "httpStatuses": [
+          200,
+          200
+        ],
+        "turnUsage": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 91,
+            "cache_read_input_tokens": 24513,
+            "cache_creation_input_tokens": 0
+          },
+          {
+            "input_tokens": 4,
+            "output_tokens": 48,
+            "cache_read_input_tokens": 24513,
+            "cache_creation_input_tokens": 135
+          }
+        ]
+      },
+      "resume": {
+        "pass": true,
+        "sameSession": true,
+        "turnUsage": [
+          {
+            "input_tokens": 4,
+            "output_tokens": 15,
+            "cache_read_input_tokens": 24648,
+            "cache_creation_input_tokens": 104
+          }
+        ]
+      },
+      "nativeAgents": {
+        "sameSession": true,
+        "nativeAgents": 2,
+        "agentLifetimesOverlap": true,
+        "httpRequestsOverlap": true,
+        "toolNames": [
+          "Agent",
+          "Agent",
+          "Bash",
+          "SubagentHandback",
+          "Bash",
+          "SubagentHandback"
+        ],
+        "classifierRequests": 4,
+        "actualAgentAndBashReceipts": true,
+        "childContinuationsCached": true,
+        "sharedRootIdentity": true
+      },
+      "interactive": {
+        "httpStatus": 200,
+        "effort": "high",
+        "thinking": {
+          "type": "adaptive",
+          "display": "updates"
+        },
+        "completed": 1,
+        "errors": [],
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 24,
+          "cache_read_input_tokens": 0,
+          "cache_creation_input_tokens": 28357
+        }
+      }
+    },
+    "warmHeadlessOpus": {
+      "input_tokens": 30,
+      "output_tokens": 1074,
+      "cache_read_input_tokens": 199157,
+      "cache_creation_input_tokens": 9858,
+      "inputCacheReadPercent": 95.2699
+    },
+    "nativeClassifiers": {
+      "input_tokens": 8,
+      "output_tokens": 36,
+      "cache_read_input_tokens": 205700,
+      "cache_creation_input_tokens": 3214,
+      "inputCacheReadPercent": 98.4578
+    },
+    "allRequests": {
+      "count": 15,
+      "http200": 15,
+      "errors": 0
+    },
+    "harnessSha256": "a36d6987161294d865958b91ee8c1ad484cfce5ebaccea9a7c435142cf13137c",
+    "bounds": [
+      "Warm headless sample is separate from the fresh interactive conversation, which created 28357 input cache tokens.",
+      "Interactive startup emitted a separate medium-effort Opus request; the actual interactive user request used high.",
+      "No production code, credentials, or service configuration changed during this verification.",
+      "This is deployed ARM64 CLI validation, not an upstream release or Linux x64 E71/E72 qualification."
+    ]
+  },
+  "sideEffectsReview": {
+    "runtimeSource": "86fceaf785e1a97fbc592b5d33877a081e46964b",
+    "base": "338630adb2832381e7ddfcee7bb8567e61cc9293",
+    "focusedTestFiles": 13,
+    "focusedTestsPass": 254,
+    "focusedTestsFail": 0,
+    "classifierMutationDetected": true,
+    "blockingRuntimeFinding": null,
+    "knownTradeoffs": [
+      "Automatic deferral disabled: larger tool catalogs increase initial schema input.",
+      "New background/fork agent IDs require an initial history replay.",
+      "Native classifier envelope requires revalidation after client changes.",
+      "UI registry authoritative after import; independent concurrent writers unsupported."
+    ],
+    "applicationCodeChangedForThisValidation": false
   }
 }
