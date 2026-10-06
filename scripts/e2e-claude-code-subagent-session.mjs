@@ -22,7 +22,7 @@ for (let i = 2; i < process.argv.length; i++) {
 }
 for (const key of names) if (key !== 'source-head') assert(typeof args[key] === 'string' && args[key].length > 0, `Missing --${key}`)
 const synthetic = args.synthetic === true, rehearsal = args.rehearsal === true
-assert(synthetic || (process.platform === 'linux' && process.arch === 'x64'), 'Native E72 acceptance requires Linux x64')
+assert(synthetic || (process.platform === 'linux' && ['x64', 'arm64'].includes(process.arch)), 'Native E72 acceptance requires Linux x64 or arm64')
 assert(args['client-version'] === '2.1.287', 'E72 requires the implicated Claude Code client 2.1.287')
 assert(/^claude-sonnet-[0-9][a-z0-9.-]*$/.test(args.model) && /^claude-sonnet-[0-9][a-z0-9.-]*$/.test(args['served-model']), 'Explicit implicated requested and served Sonnet IDs required')
 const maximum = Number(args['max-queries']), costLimit = Number(args['max-cost-usd']), timeout = Number(args['timeout-ms'])

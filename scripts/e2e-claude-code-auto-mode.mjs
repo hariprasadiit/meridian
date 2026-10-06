@@ -78,7 +78,7 @@ for (let i = 2; i < process.argv.length; i++) {
 }
 for (const key of names) if (key !== 'source-head') assert(typeof args[key] === 'string' && args[key].length > 0, `Missing --${key}`)
 const synthetic = args.synthetic === true, rehearsal = args.rehearsal === true
-assert(synthetic || (process.platform === 'linux' && process.arch === 'x64'), 'Native E71 acceptance requires Linux x64')
+assert(synthetic || (process.platform === 'linux' && ['x64', 'arm64'].includes(process.arch)), 'Native E71 acceptance requires Linux x64 or arm64')
 assert(/^claude-sonnet-[0-9][a-z0-9.-]*$/.test(args.model) && /^claude-sonnet-[0-9][a-z0-9.-]*$/.test(args['served-model']), 'Explicit implicated requested and served Sonnet IDs required')
 assert(/^claude-sonnet-[0-9][a-z0-9.-]*$/.test(args['classifier-served-model']) && [args.model, 'claude-sonnet-5'].includes(args['classifier-model']), 'Pin one audited classifier arm: Sonnet5 default or the requested main fallback, and its explicit served model')
 const maximum = Number(args['max-queries']), costLimit = Number(args['max-cost-usd']), timeout = Number(args['timeout-ms'])
