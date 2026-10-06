@@ -267,5 +267,37 @@
       "UI registry authoritative after import; independent concurrent writers unsupported."
     ],
     "applicationCodeChangedForThisValidation": false
+  },
+  "activeKeyListUpdate": {
+    "date": "2026-10-06",
+    "runtimeSource": "f7e1ba2bd44d6a88d1e6503770724c439b5213ed",
+    "activeOnly": true,
+    "namesUniqueIgnoringCase": true,
+    "revokedNamesReserved": true,
+    "focusedTests": {
+      "pass": 11,
+      "fail": 0
+    },
+    "linuxGates": {
+      "passes": 5549,
+      "fails": 0,
+      "skips": 2,
+      "batches": 19,
+      "platform": "Linux ARM64",
+      "node": "22.23.3",
+      "bun": "1.3.14",
+      "npmTestExit": 0,
+      "typecheckExit": 0,
+      "buildExit": 0,
+      "imageBuildExit": 0,
+      "source": "f7e1ba2bd44d6a88d1e6503770724c439b5213ed"
+    },
+    "browserCreateRevokeReloadAndEmptyState": "PASS",
+    "productionChecks": 21,
+    "activeKeyCount": 4,
+    "existingRecordsUnchanged": true,
+    "compiledJavaScriptArtifactsMatched": 37,
+    "inferenceOrSessionChanges": false,
+    "liveModelQueriesRequired": false
   }
 }
