@@ -82,14 +82,14 @@ function load(): Registry {
 }
 
 const publicInfo = ({ id, name, createdAt, revokedAt }: StoredKey): ClientKeyInfo => ({ id, name, createdAt, revokedAt })
-export function listClientKeys(): ClientKeyInfo[] { return load().keys.map(publicInfo) }
+export function listClientKeys(): ClientKeyInfo[] { return load().keys.filter(key => key.revokedAt === null).map(publicInfo) }
 
 /** Synchronous read/mutate/rename keeps writes serialized in the single Meridian server process. */
 export function createClientKey(name: unknown): { key: string; credential: ClientKeyInfo } {
   if (!validName(name)) throw new ClientKeyError("Use a name of 1–64 characters without control characters")
   const registry = load()
   if (registry.keys.length >= MAX_KEYS) throw new ClientKeyError("The key registry is full", 409)
-  if (registry.keys.some(key => key.name === name && key.revokedAt === null)) throw new ClientKeyError("An active key already has this name", 409)
+  if (registry.keys.some(key => key.name.toLowerCase() === name.toLowerCase())) throw new ClientKeyError("A key already has this name. Choose a different name.", 409)
   const key = `mrn_${randomBytes(32).toString("hex")}`
   const stored: StoredKey = { id: randomUUID(), name, hash: hashKey(key), createdAt: new Date().toISOString(), revokedAt: null }
   registry.keys.push(stored)

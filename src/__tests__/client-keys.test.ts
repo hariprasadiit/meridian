@@ -54,10 +54,11 @@ describe("native client key registry", () => {
     process.env.MERIDIAN_CLIENT_KEY_HASHES = JSON.stringify({ existing: createHash("sha256").update("old-client").digest("hex") })
     expect(hasValidClientKey("old-client")).toBe(true)
     const original = listClientKeys()[0]!
-    revokeClientKey(original.id)
+    const revoked = revokeClientKey(original.id)
     expect(hasValidClientKey("old-client")).toBe(false)
-    expect(listClientKeys()[0]!.revokedAt).not.toBeNull()
-    expect(revokeClientKey(original.id)).toEqual(listClientKeys()[0]!)
+    expect(listClientKeys()).toEqual([])
+    expect(revoked.revokedAt).not.toBeNull()
+    expect(revokeClientKey(original.id)).toEqual(revoked)
   })
   it("rejects malformed registries instead of accepting credentials", () => {
     createClientKey("client")
@@ -73,7 +74,21 @@ describe("native client key registry", () => {
     expect(() => revokeClientKey("unknown")).toThrow("not found")
     expect(readFileSync(file(), "utf8")).toBe(before)
     revokeClientKey(listClientKeys()[0]!.id)
-    expect(() => createClientKey("client")).not.toThrow()
+    expect(() => createClientKey("client")).toThrow("already")
+  })
+  it("reserves names regardless of capitalization, including after revocation", () => {
+    const original = createClientKey("Laptop")
+    for (const name of ["Laptop", "laptop", "LAPTOP"]) expect(() => createClientKey(name)).toThrow("already")
+    const revoked = revokeClientKey(original.credential.id)
+    const before = readFileSync(file(), "utf8")
+    for (const name of ["Laptop", "laptop", "LAPTOP"]) expect(() => createClientKey(name)).toThrow("already")
+    expect(readFileSync(file(), "utf8")).toBe(before)
+    expect(listClientKeys()).toEqual([])
+    expect(hasValidClientKey(original.key)).toBe(false)
+    expect(revokeClientKey(original.credential.id)).toEqual(revoked)
+    const other = createClientKey("Desktop")
+    expect(listClientKeys()).toEqual([other.credential])
+    expect(hasValidClientKey(other.key)).toBe(true)
   })
 })
 
@@ -101,6 +116,23 @@ describe("client key boundary", () => {
     expect((await server.fetch(request("/v1/models", created.key))).status).toBe(503)
     expect((await server.fetch(request("/keys/api"))).status).toBe(503)
     expect((await server.fetch(request("/v1/models"))).status).toBe(200)
+  })
+  it("lists only active keys and rejects duplicate names through the API", async () => {
+    const server = app(), retired = createClientKey("Employee"), active = createClientKey("Other")
+    await server.fetch(request(`/keys/api/${retired.credential.id}`, "test-admin", { method: "DELETE" }))
+    const listed = await server.fetch(request("/keys/api"))
+    expect(await listed.json()).toEqual({ keys: [active.credential] })
+    const before = readFileSync(file(), "utf8")
+    for (const name of ["employee", "EMPLOYEE", "other", "Other"]) {
+      const response = await server.fetch(request("/keys/api", "test-admin", {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }),
+      }))
+      expect(response.status).toBe(409)
+      expect((await response.json() as { error: string }).error).toContain("already")
+    }
+    expect(readFileSync(file(), "utf8")).toBe(before)
+    expect((await server.fetch(request("/v1/models", retired.key))).status).toBe(401)
+    expect((await server.fetch(request("/v1/models", active.key))).status).toBe(200)
   })
   it("prevents key management without an admin and does not silently open configured clients", async () => {
     const created = createClientKey("employee")

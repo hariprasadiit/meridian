@@ -32,7 +32,6 @@ button:disabled { opacity: .55; cursor: wait; }
 .key-name { font-weight: 600; }
 .key-meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
 .status { color: var(--green); font-size: 12px; white-space: nowrap; }
-.revoked { color: var(--muted); }
 .list-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 h2 { font-size: 16px; margin: 0; }
 dialog { color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 24px; width: min(540px, calc(100% - 32px)); }
@@ -52,7 +51,7 @@ ${profileBarHtml}
 <button id="create-button" class="primary" type="submit">Create key</button></div></form>
 <p class="note">Keys can call Messages and Models. Dashboard access uses the administrator credential.</p>
 </section>
-<section class="card" aria-labelledby="list-title"><div class="list-heading"><h2 id="list-title">Client keys</h2><button id="refresh" type="button">Refresh</button></div>
+<section class="card" aria-labelledby="list-title"><div class="list-heading"><h2 id="list-title">Active keys</h2><button id="refresh" type="button">Refresh</button></div>
 <p id="empty" class="note">Loading keys…</p><ul id="keys" class="key-list"></ul></section>
 <p class="note">Changes apply immediately. Revoking a key prevents new requests; requests already running can finish.</p>
 </main>
@@ -80,20 +79,18 @@ ${profileBarJs}
     document.getElementById('refresh').disabled = true;
     try {
       var data = await api(''); list.replaceChildren();
-      empty.hidden = data.keys.length > 0; empty.textContent = 'No client keys yet. Create one above.';
+      empty.hidden = data.keys.length > 0; empty.textContent = 'No active keys. Create one above.';
       data.keys.forEach(function(key) {
         var row = document.createElement('li'); row.className = 'key-row';
         var details = document.createElement('div'); details.className = 'key-detail';
         var name = document.createElement('div'); name.className = 'key-name'; name.textContent = key.name;
         var meta = document.createElement('div'); meta.className = 'key-meta';
-        meta.textContent = 'Created ' + new Date(key.createdAt).toLocaleString() + (key.revokedAt ? ' · Revoked ' + new Date(key.revokedAt).toLocaleString() : '');
+        meta.textContent = 'Created ' + new Date(key.createdAt).toLocaleString();
         details.append(name, meta);
-        var badge = document.createElement('span'); badge.className = 'status' + (key.revokedAt ? ' revoked' : ''); badge.textContent = key.revokedAt ? 'Revoked' : 'Active';
+        var badge = document.createElement('span'); badge.className = 'status'; badge.textContent = 'Active';
         row.append(details, badge);
-        if (!key.revokedAt) {
-          var button = document.createElement('button'); button.className = 'danger'; button.textContent = 'Revoke'; button.setAttribute('aria-label', 'Revoke ' + key.name);
-          button.addEventListener('click', function() { revokeTarget = key; document.getElementById('revoke-description').textContent = key.name + ' will stop accepting new API requests.'; revokeDialog.showModal(); }); row.append(button);
-        }
+        var button = document.createElement('button'); button.className = 'danger'; button.textContent = 'Revoke'; button.setAttribute('aria-label', 'Revoke ' + key.name);
+        button.addEventListener('click', function() { revokeTarget = key; document.getElementById('revoke-description').textContent = key.name + ' will stop accepting new API requests.'; revokeDialog.showModal(); }); row.append(button);
         list.append(row);
       });
     } catch (error) { status(error.message, true); empty.textContent = 'Unable to load keys. Try Refresh.'; }
