@@ -298,6 +298,54 @@
     "existingRecordsUnchanged": true,
     "compiledJavaScriptArtifactsMatched": 37,
     "inferenceOrSessionChanges": false,
-    "liveModelQueriesRequired": false
+    "liveModelQueriesRequired": false,
+    "supersededBy": "revokedKeyDeletionUpdate"
+  },
+  "currentRuntimeSource": "a665a20aa0b296190f27d084222bf8243e4dbde5",
+  "revokedKeyDeletionUpdate": {
+    "date": "2026-10-06",
+    "runtimeSource": "a665a20aa0b296190f27d084222bf8243e4dbde5",
+    "revokedRecordsDeleted": true,
+    "revokedNamesReusable": true,
+    "activeNamesUniqueIgnoringCase": true,
+    "authoritativeEmptyRegistryRetained": true,
+    "deletedEarlierRevokedCount": 5,
+    "activeKeyCount": 3,
+    "activeRecordsUnchanged": true,
+    "focusedTests": {
+      "pass": 12,
+      "fail": 0,
+      "beforePass": 7,
+      "beforeFail": 5
+    },
+    "linuxGates": {
+      "passes": 5550,
+      "fails": 0,
+      "skips": 2,
+      "batches": 19,
+      "platform": "Linux ARM64 / musl",
+      "node": "22.23.3",
+      "bun": "1.3.14",
+      "npmTestExit": 0,
+      "typecheckExit": 0,
+      "buildExit": 0,
+      "imageBuildExit": 0,
+      "runtimeSource": "a665a20aa0b296190f27d084222bf8243e4dbde5",
+      "gateSource": "cbe87df66d5fef0693e6b8b2c07f4b95fcb0d3d1",
+      "previousRuns": [
+        "Initial error-reporting cleanup race fixed and reproduced with delayed acknowledgment; see reporter-race.json",
+        "Bun native SIGTRAP/segfault, zero assertion failures; implicated file passed 24 cases in isolation and complete retry passed without exclusions; see bun-crash.json"
+      ]
+    },
+    "browserCreateRevokeReloadReuseAndActiveDuplicate": "PASS",
+    "productionChecks": 23,
+    "oldKeyRejectedAfterSameNameReplacement": true,
+    "newKeyAcceptedOnBothHostnamesAndHeaders": true,
+    "ownedProbesDeleted": true,
+    "compiledJavaScriptArtifactsMatched": 37,
+    "savedCoolifyConfigurationVerified": true,
+    "inferenceOrSessionChanges": false,
+    "liveModelQueriesRequired": false,
+    "gateCorrection": "Crash reporter test waits for collector acknowledgment and removal of .sending claim; no runtime reporter changes. Bun 1.3.14 native crash log preserved; isolated implicated file and complete unchanged runtime retry passed."
   }
 }
